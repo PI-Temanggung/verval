@@ -19,7 +19,6 @@ SHEET_URL = (
 def load_excel_data():
   xls = pd.ExcelFile(SHEET_URL)
   sheet_name = xls.sheet_names[0]
-  # dtype=str memastikan semua kolom termasuk NIK dibaca sebagai teks utuh
   df = pd.read_excel(SHEET_URL, sheet_name=sheet_name, header=0, dtype=str)
   return df, sheet_name
 
@@ -157,6 +156,7 @@ if selected_nama_kios != "-- Pilih Kios --":
       "Tampilkan berdasarkan:", status_filter_options
   )
 
+  # Filter baris berdasarkan status verifikasi di session state
   filtered_indices = []
   for idx, row in df_kios_all.iterrows():
     trx_key = str(row[col_trx])
@@ -189,6 +189,8 @@ if selected_nama_kios != "-- Pilih Kios --":
       st.session_state.last_filter = selected_nama_kios
 
     if st.session_state.current_pos >= len(filtered_indices):
+      st.session_state.current_pos = len(filtered_indices) - 1
+    if st.session_state.current_pos < 0:
       st.session_state.current_pos = 0
 
     pos = st.session_state.current_pos
@@ -252,7 +254,6 @@ if selected_nama_kios != "-- Pilih Kios --":
       kios_gabung_val = row_data.get("Kios_Gabungan", "-")
       petani_val = row_data.get(col_petani, "-") if col_petani else "-"
 
-      # Ambil NIK dan pastikan bersih sebagai string utuh
       nik_val = (
           str(row_data[col_nik]).strip()
           if col_nik and pd.notna(row_data.get(col_nik))
@@ -269,7 +270,7 @@ if selected_nama_kios != "-- Pilih Kios --":
       st.markdown(f"**Kios:** `{kios_gabung_val}`")
       st.markdown(f"**No Transaksi:** `{trx_val}`")
       st.markdown(f"**Nama Petani:** {petani_val}")
-      st.markdown(f"**NIK:** `{nik_val}`")  # Ditampilkan dalam format kode/teks
+      st.markdown(f"**NIK:** `{nik_val}`")
       st.markdown(f"**Tanggal:** {tgl_val}")
       st.markdown(
           f"**Tipe Tebus:** <span style='color:blue;"
@@ -314,21 +315,21 @@ if selected_nama_kios != "-- Pilih Kios --":
       with col_btn1:
         if st.button("✅ TERIMA", type="primary", key=f"terima_{row_idx}"):
           st.session_state.verifikasi_dict[current_trx_key] = "TERIMA"
-          if pos < len(filtered_indices) - 1:
+          if st.session_state.current_pos < len(filtered_indices) - 1:
             st.session_state.current_pos += 1
           st.rerun()
 
       with col_btn2:
         if st.button("⚠️ RAGU", key=f"ragu_{row_idx}"):
           st.session_state.verifikasi_dict[current_trx_key] = "RAGU-RAGU"
-          if pos < len(filtered_indices) - 1:
+          if st.session_state.current_pos < len(filtered_indices) - 1:
             st.session_state.current_pos += 1
           st.rerun()
 
       with col_btn3:
         if st.button("❌ TOLAK", key=f"tolak_{row_idx}"):
           st.session_state.verifikasi_dict[current_trx_key] = "TOLAK"
-          if pos < len(filtered_indices) - 1:
+          if st.session_state.current_pos < len(filtered_indices) - 1:
             st.session_state.current_pos += 1
           st.rerun()
 
@@ -361,7 +362,7 @@ if selected_nama_kios != "-- Pilih Kios --":
     nav_c1, nav_c2, nav_c3 = st.columns([1, 2, 1])
     with nav_c1:
       if st.button("⬅️ Sebelumnya", key=f"prev_{row_idx}"):
-        if pos > 0:
+        if st.session_state.current_pos > 0:
           st.session_state.current_pos -= 1
           st.rerun()
     with nav_c2:
@@ -372,7 +373,7 @@ if selected_nama_kios != "-- Pilih Kios --":
       )
     with nav_c3:
       if st.button("Selanjutnya ➡️", key=f"next_{row_idx}"):
-        if pos < len(filtered_indices) - 1:
+        if st.session_state.current_pos < len(filtered_indices) - 1:
           st.session_state.current_pos += 1
           st.rerun()
 
