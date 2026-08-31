@@ -99,8 +99,7 @@ def find_col(cols, keywords):
 
 
 def gdrive_image_candidates(url: str):
-    """Kembalikan beberapa kandidat URL gambar dari sebuah link Google Drive,
-    diurutkan dari yang paling andal, agar preview lebih jarang gagal."""
+    """Kembalikan kandidat URL gambar thumbnail untuk link Google Drive."""
     if not url or not isinstance(url, str):
         return []
     url = url.strip()
@@ -122,11 +121,18 @@ def gdrive_image_candidates(url: str):
     if not file_id:
         return [url]
 
-    return [
-        f"https://lh3.googleusercontent.com/d/{file_id}=s1000",
-        f"https://drive.google.com/uc?export=view&id={file_id}",
-        f"https://drive.google.com/thumbnail?id={file_id}&sz=w1000",
-    ]
+    return [f"https://lh3.googleusercontent.com/d/{file_id}=s1000"]
+
+
+def resolve_image_url(url: str) -> str:
+    """Kalau link Google Drive, ubah ke format thumbnail. Selain itu (mis. link
+    nota dari aplikasi lain), pakai URL aslinya apa adanya — dimuat langsung
+    lewat browser pengguna, bukan lewat server, supaya tidak kena proteksi
+    anti-bot di sisi server."""
+    if url and "drive.google.com" in url:
+        candidates = gdrive_image_candidates(url)
+        return candidates[0] if candidates else url
+    return url
 
 
 def update_status_to_gsheet(trx_key, status_value):
@@ -391,20 +397,28 @@ if selected_nama_kios != "-- Pilih Kios --":
 
             if pd.notna(raw_url) and str(raw_url).strip().startswith("http"):
                 raw_url = str(raw_url).strip()
-                candidates = gdrive_image_candidates(raw_url)
-                shown = False
-                for candidate in candidates:
-                    try:
-                        st.image(candidate, use_container_width=True)
-                        shown = True
-                        break
-                    except Exception:
-                        continue
-                if not shown:
-                    st.warning("Gambar tidak dapat ditampilkan langsung. Gunakan link di bawah untuk membuka manual.")
+                img_url = resolve_image_url(raw_url)
+                safe_key = "".join(ch for ch in current_trx_key if ch.isalnum())
+                st.markdown(
+                    f"""
+                    <div style="text-align:center;">
+                      <img src="{img_url}" style="max-width:100%; border-radius:10px;
+                           border:1px solid #e5e7eb;"
+                           onerror="this.onerror=null; this.style.display='none';
+                                    document.getElementById('nota-err-{safe_key}').style.display='block';">
+                      <div id="nota-err-{safe_key}" style="display:none; padding:16px;
+                           background:#fef2f2; border:1px solid #fecaca; border-radius:8px;
+                           color:#b91c1c; margin-top:8px; font-size:13px;">
+                          Gambar nota tidak bisa ditampilkan langsung di sini
+                          (situs sumber mungkin membatasi akses tersemat).
+                      </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
                 st.markdown(
                     f"<div style='text-align:center; margin-top:8px;'>"
-                    f"<a href='{raw_url}' target='_blank'>🔗 Buka Gambar Ukuran Penuh</a></div>",
+                    f"<a href='{raw_url}' target='_blank'>🔗 Buka Nota di Tab Baru</a></div>",
                     unsafe_allow_html=True,
                 )
             else:
