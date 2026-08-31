@@ -304,7 +304,7 @@ if selected_nama_kios != "-- Pilih Kios --":
             st.markdown(f"Status: <span style='color:{status_color}; font-weight:bold;'>{current_status}</span>", unsafe_allow_html=True)
 
             st.markdown("---")
-            st.markdown("#### Aksi Verifikasi:")
+            st.markdown("#### Aksi Verifikasi (Tulis Otomatis ke Spreadsheet):")
 
             col_btn1, col_btn2, col_btn3 = st.columns(3)
             with col_btn1:
@@ -344,7 +344,6 @@ if selected_nama_kios != "-- Pilih Kios --":
             if pd.notna(nota_url) and str(nota_url).startswith("http"):
                 raw_url = str(nota_url).strip()
                 
-                # Gunakan metode Iframe Google Drive Preview
                 if "drive.google.com" in raw_url:
                     file_id = None
                     if "/file/d/" in raw_url:
@@ -363,16 +362,16 @@ if selected_nama_kios != "-- Pilih Kios --":
                     if file_id:
                         embed_url = f"https://drive.google.com/file/d/{file_id}/preview"
                         st.markdown(
-                            f'<iframe src="{embed_url}" width="100%" height="550" style="border: none; border-radius: 8px; box-shadow: 0px 2px 5px rgba(0,0,0,0.1);"></iframe>',
+                            f'<iframe src="{embed_url}" width="100%" height="520" style="border: none; border-radius: 8px; box-shadow: 0px 2px 5px rgba(0,0,0,0.1);"></iframe>',
                             unsafe_allow_html=True,
                         )
                     else:
-                        st.warning("Format ID Google Drive tidak dapat diekstrak.")
+                        st.warning("Format ID Google Drive tidak dapat diekstrak dari link berikut:")
+                        st.code(raw_url)
                 else:
-                    # Jika link bukan dari Google Drive (misal imgur, dll), tampilkan biasa
                     st.image(raw_url, use_container_width=True)
 
-                st.markdown(f"<div style='margin-top: 8px; text-align: center;'><a href='{raw_url}' target='_blank'>🔗 Buka Gambar Asli Ukuran Penuh di Tab Baru</a></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='margin-top: 10px; text-align: center; background: #f0f2f6; padding: 8px; border-radius: 6px;'><a href='{raw_url}' target='_blank' style='font-weight: bold; text-decoration: none;'>🔗 Klik Disini untuk Buka Gambar Ukuran Penuh di Tab Baru</a></div>", unsafe_allow_html=True)
             else:
                 st.warning("Link bukti nota tidak tersedia pada baris ini.")
 
