@@ -165,16 +165,26 @@ def fetch_nota_image(url: str):
 
 def update_status_to_gsheet(trx_key, status_value):
     if not APPS_SCRIPT_URL:
-        return False
+        return False, "APPS_SCRIPT_URL belum diisi."
     try:
         payload = {"transaksi": str(trx_key), "status": str(status_value)}
         r = requests.post(APPS_SCRIPT_URL, json=payload, timeout=10)
-        if r.status_code == 200:
+        if r.status_code != 200:
+            return False, f"Apps Script merespons HTTP {r.status_code}."
+        try:
+            body = r.json()
+        except Exception:
+            return False, "Respons Apps Script bukan JSON yang valid."
+        result = body.get("result")
+        if result == "success":
             st.cache_data.clear()
-            return True
+            return True, None
+        elif result == "not_found":
+            return False, f"No. Transaksi '{trx_key}' tidak ditemukan di spreadsheet oleh Apps Script."
+        else:
+            return False, f"Apps Script gagal: {body.get('message', result)}"
     except Exception as ex:
-        st.toast(f"Gagal sinkronisasi ke Spreadsheet: {ex}", icon="⚠️")
-    return False
+        return False, f"Gagal sinkronisasi ke Spreadsheet: {ex}"
 
 
 # ============================================================
@@ -395,9 +405,10 @@ if selected_nama_kios != "-- Pilih Kios --":
 
             def set_status(new_status):
                 st.session_state.verifikasi_dict[current_trx_key] = new_status
-                ok = update_status_to_gsheet(current_trx_key, new_status)
+                ok, err_msg = update_status_to_gsheet(current_trx_key, new_status)
                 if not ok:
-                    st.toast("Status tersimpan lokal, tapi sinkron ke Sheet gagal.", icon="⚠️")
+                    st.error(f"Status TERSIMPAN LOKAL saja, gagal sinkron ke Spreadsheet: {err_msg}")
+                    return
                 if st.session_state.current_pos < len(filtered_indices) - 1:
                     st.session_state.current_pos += 1
                 st.rerun()
@@ -415,7 +426,9 @@ if selected_nama_kios != "-- Pilih Kios --":
             if st.button("🔄 Reset Status", key=f"reset_{row_idx}"):
                 if current_trx_key in st.session_state.verifikasi_dict:
                     del st.session_state.verifikasi_dict[current_trx_key]
-                    update_status_to_gsheet(current_trx_key, STATUS_BELUM)
+                    ok, err_msg = update_status_to_gsheet(current_trx_key, STATUS_BELUM)
+                    if not ok:
+                        st.error(f"Reset lokal berhasil, tapi gagal sinkron ke Spreadsheet: {err_msg}")
                 st.rerun()
 
         # ---------------- PREVIEW NOTA (fokus utama) ----------------
