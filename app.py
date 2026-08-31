@@ -57,7 +57,6 @@ def find_col(keywords):
 
 
 col_kec = find_col(["kecamatan"])
-# Memastikan sistem mendeteksi kolom Nama Kios (mengabaikan kolom Kode Kios untuk filter utama)
 col_kios_name = find_col(["nama kios", "nama_kios", "kios"])
 col_kios_code = find_col(["kode kios", "id kios", "kode"])
 col_trx = find_col(["no transaksi", "kode trx"])
@@ -70,6 +69,34 @@ if not col_kec or not col_kios_name or not col_trx:
       f" lengkap di dalam Google Spreadsheet Anda. Kolom terdeteksi: {cols}"
   )
   st.stop()
+
+# --- KAMUS PEMETAAN KODE KIOS KE NAMA KIOS ASLI ---
+# (Opsional: Jika ingin mengubah kode RT00... langsung jadi Nama Kios yang jelas)
+# Contoh format: "RT00123": "Kios Tani Makmur"
+KAMUS_NAMA_KIOS = {
+    # Masukkan pemetaan kode ke nama kios di sini jika diperlukan, contoh:
+    # "RT00001234": "Kios Subur Tani",
+}
+
+
+def get_nama_kios_bersih(row):
+  kode = str(row[col_kios_code]) if col_kios_code else ""
+  nama_asli = str(row[col_kios_name])
+
+  # Cek apakah ada di kamus manual
+  if kode in KAMUS_NAMA_KIOS:
+    return f"{kode} - {KAMUS_NAMA_KIOS[kode]}"
+  elif nama_asli in KAMUS_NAMA_KIOS:
+    return f"{kode} - {KAMUS_NAMA_KIOS[nama_asli]}"
+  else:
+    # Jika nama kios di spreadsheet masih berupa kode atau kosong, gabungkan agar informatif
+    if nama_asli == kode or "RT" in nama_asli or len(nama_asli) < 5:
+      return f"[{kode}] Kios Wilayah {row[col_kec]}"
+    return f"{kode} - {nama_asli}"
+
+
+# Terapkan kolom tampilan kios baru yang digabung/dibersihkan
+df_original["Kios_Tampil"] = df_original.apply(get_nama_kios_bersih, axis=1)
 
 # --- SIDEBAR: FILTER BERBASIS KECAMATAN & NAMA KIOS ---
 st.sidebar.markdown(
@@ -88,10 +115,12 @@ if selected_kecamatan != "-- Pilih Kecamatan --":
 else:
   df_filtered = df_original
 
-# Filter berdasarkan NAMA KIOS (Bukan Kode Kios)
-kios_list = sorted(df_filtered[col_kios_name].dropna().astype(str).unique().tolist())
+# Filter berdasarkan Nama Kios yang sudah digabung/dibersihkan
+kios_list = sorted(
+    df_filtered["Kios_Tampil"].dropna().astype(str).unique().tolist()
+)
 selected_nama_kios = st.sidebar.selectbox(
-    "2. Pilih Nama Kios", ["-- Pilih Kios --"] + kios_list
+    "2. Pilih Kios", ["-- Pilih Kios --"] + kios_list
 )
 
 st.sidebar.markdown("---")
@@ -101,9 +130,7 @@ if "verifikasi_dict" not in st.session_state:
   st.session_state.verifikasi_dict = {}
 
 if selected_nama_kios != "-- Pilih Kios --":
-  df_kios_all = df_filtered[
-      df_filtered[col_kios_name].astype(str) == selected_nama_kios
-  ]
+  df_kios_all = df_filtered[df_filtered["Kios_Tampil"] == selected_nama_kios]
 
   st.sidebar.markdown("#### 🔎 Filter Status Nota:")
   status_filter_options = [
@@ -198,13 +225,12 @@ if selected_nama_kios != "-- Pilih Kios --":
           unsafe_allow_html=True,
       )
       trx_val = row_data.get(col_trx, "-")
-      kios_name_val = row_data.get(col_kios_name, "-")
-      kios_code_val = row_data.get(col_kios_code, "-") if col_kios_code else "-"
+      kios_tampil_val = row_data.get("Kios_Tampil", "-")
       petani_val = row_data.get(col_petani, "-") if col_petani else "-"
       nik_val = row_data.get("NIK", "-")
       tgl_val = row_data.get("Tanggal Tebus", "-")
 
-      st.markdown(f"**Nama Kios:**\n{kios_name_val} (`{kios_code_val}`)")
+      st.markdown(f"**Kios:**\n{kios_tampil_val}")
       st.markdown(f"**No Transaksi:**\n`{trx_val}`")
       st.markdown(f"**Nama Petani:**\n{petani_val}")
       st.markdown(f"**NIK:**\n{nik_val}")
