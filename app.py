@@ -12,7 +12,7 @@ st.set_page_config(
 # 1. Link export cepat untuk membaca data Excel dari Google Spreadsheet
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1ikC39Z3V9w5yypVDGVgMsfiuSInRRgvR/export?format=xlsx"
 
-# 2. URL Web App dari Google Apps Script Anda (Sudah terhubung otomatis)
+# 2. URL Web App dari Google Apps Script Anda
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx5mnQ71mpsG_K66m0-4ASG_aj0X7xKUDJXoMIHNvr5c5J0oAqgx25aVeepzaL2Qh5LRQ/exec"
 
 # Memuat data live dari Google Spreadsheet (Cache 30 detik agar update cepat)
@@ -45,6 +45,33 @@ def update_status_to_gsheet(trx_key, status_value):
     except Exception as ex:
         st.warning(f"Gagal sinkronisasi otomatis ke Spreadsheet: {ex}")
     return False
+
+# --- FUNGSI MENGUBAH LINK GOOGLE DRIVE MENJADI GAMBAR LANGSUNG ---
+def convert_gdrive_url(url):
+    if not url or not isinstance(url, str):
+        return None
+    url = url.strip()
+    file_id = None
+    
+    if "drive.google.com" in url:
+        if "/file/d/" in url:
+            try:
+                file_id = url.split("/file/d/")[1].split("/")[0]
+            except: pass
+        elif "open?id=" in url:
+            try:
+                file_id = url.split("open?id=")[1].split("&")[0]
+            except: pass
+        elif "id=" in url:
+            try:
+                file_id = url.split("id=")[1].split("&")[0]
+            except: pass
+            
+        if file_id:
+            # Menggunakan endpoint thumbnail/direct image dari Google Drive agar bisa langsung dirender st.image
+            return f"https://lh3.googleusercontent.com/d/{file_id}=s800"
+            
+    return url
 
 # --- PENCARIAN KOLOM OTOMATIS ---
 cols = list(df_original.columns)
@@ -305,17 +332,16 @@ if selected_nama_kios != "-- Pilih Kios --":
 
             if pd.notna(nota_url) and str(nota_url).startswith("http"):
                 raw_url = str(nota_url).strip()
-                st.markdown(
-                    f"""
-                    <div style="background: #f8f9fa; border: 2px dashed #0055ff; padding: 25px; border-radius: 10px; text-align: center; margin-bottom: 15px;">
-                        <p style="margin-bottom: 15px; font-weight: bold; color: #333;">Klik tombol di bawah untuk melihat gambar nota asli secara penuh:</p>
-                        <a href="{raw_url}" target="_blank" style="background: #0055ff; color: white; padding: 10px 20px; border-radius: 6px; font-weight: bold; text-decoration: none; display: inline-block;">
-                            🔗 Buka Nota Gambar / File di Tab Baru
-                        </a>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                direct_img_url = convert_gdrive_url(raw_url)
+                
+                # Menampilkan gambar langsung di aplikasi Streamlit
+                try:
+                    st.image(direct_img_url, caption=f"Nota No. Transaksi: {current_trx_key}", use_container_width=True)
+                except Exception:
+                    st.warning("Gagal merender gambar langsung. Anda dapat membuka link berikut:")
+                
+                # Sediakan juga link cadangan untuk buka tab baru jika diperlukan
+                st.markdown(f"<div style='text-align: center; margin-top: 8px;'><a href='{raw_url}' target='_blank'>🔗 Buka Gambar Ukuran Penuh di Tab Baru</a></div>", unsafe_allow_html=True)
             else:
                 st.warning("Link bukti nota tidak tersedia pada baris ini.")
 
