@@ -19,7 +19,8 @@ SHEET_URL = (
 def load_excel_data():
   xls = pd.ExcelFile(SHEET_URL)
   sheet_name = xls.sheet_names[0]
-  df = pd.read_excel(SHEET_URL, sheet_name=sheet_name)
+  # header=0 artinya baris pertama adalah judul kolom
+  df = pd.read_excel(SHEET_URL, sheet_name=sheet_name, header=0)
   return df, sheet_name
 
 
@@ -44,7 +45,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- PENCARIAN NAMA KOLOM SECARA FLEKSIBEL ---
+# --- PENCARIAN KOLOM BERDASARKAN NAMA & POSISI (G dan H) ---
 cols = list(df_original.columns)
 
 
@@ -57,48 +58,34 @@ def find_col(keywords):
 
 
 col_kec = find_col(["kecamatan"])
-col_kios_name = find_col(["nama kios", "nama_kios", "kios"])
-col_kios_code = find_col(["kode kios", "id kios", "kode"])
-col_trx = find_col(["no transaksi", "kode trx"])
+col_trx = find_col(["no transaksi", "kode trx", "transaksi"])
 col_petani = find_col(["nama petani", "petani"])
 col_url = find_col(["url bukti", "link", "url"])
 
-if not col_kec or not col_kios_name or not col_trx:
+# Memastikan Kolom G (Indeks 6) dan Kolom H (Indeks 7) diambil secara pasti
+# (Python menghitung kolom mulai dari 0, jadi Kolom G = indeks 6, Kolom H = indeks 7)
+if len(cols) >= 8:
+  col_kode_kios_pos = cols[6]  # Kolom G
+  col_nama_kios_pos = cols[7]  # Kolom H
+else:
+  col_kode_kios_pos = cols[-2] if len(cols) > 1 else cols[0]
+  col_nama_kios_pos = cols[-1]
+
+if not col_kec or not col_trx:
   st.error(
-      "Kolom penting ('Kecamatan', 'Nama Kios', atau 'No Transaksi') tidak"
-      f" lengkap di dalam Google Spreadsheet Anda. Kolom terdeteksi: {cols}"
+      "Kolom penting ('Kecamatan' atau 'No Transaksi') tidak ditemukan. Kolom"
+      f" terdeteksi: {cols}"
   )
   st.stop()
 
-# --- KAMUS PEMETAAN KODE KIOS KE NAMA KIOS ASLI ---
-# (Opsional: Jika ingin mengubah kode RT00... langsung jadi Nama Kios yang jelas)
-# Contoh format: "RT00123": "Kios Tani Makmur"
-KAMUS_NAMA_KIOS = {
-    # Masukkan pemetaan kode ke nama kios di sini jika diperlukan, contoh:
-    # "RT00001234": "Kios Subur Tani",
-}
+# --- GABUNGKAN KODE KIOS (G) DAN NAMA KIOS (H) MENJADI SATU ---
+df_original["Kios_Gabungan"] = (
+    df_original[col_kode_kios_pos].astype(str)
+    + " - "
+    + df_original[col_nama_kios_pos].astype(str)
+)
 
-
-def get_nama_kios_bersih(row):
-  kode = str(row[col_kios_code]) if col_kios_code else ""
-  nama_asli = str(row[col_kios_name])
-
-  # Cek apakah ada di kamus manual
-  if kode in KAMUS_NAMA_KIOS:
-    return f"{kode} - {KAMUS_NAMA_KIOS[kode]}"
-  elif nama_asli in KAMUS_NAMA_KIOS:
-    return f"{kode} - {KAMUS_NAMA_KIOS[nama_asli]}"
-  else:
-    # Jika nama kios di spreadsheet masih berupa kode atau kosong, gabungkan agar informatif
-    if nama_asli == kode or "RT" in nama_asli or len(nama_asli) < 5:
-      return f"[{kode}] Kios Wilayah {row[col_kec]}"
-    return f"{kode} - {nama_asli}"
-
-
-# Terapkan kolom tampilan kios baru yang digabung/dibersihkan
-df_original["Kios_Tampil"] = df_original.apply(get_nama_kios_bersih, axis=1)
-
-# --- SIDEBAR: FILTER BERBASIS KECAMATAN & NAMA KIOS ---
+# --- SIDEBAR: FILTER BERBASIS KECAMATAN & KIOS GABUNGAN ---
 st.sidebar.markdown(
     "<h2 style='color: #002b80; font-size: 20px;'>🎛️ Navigasi & Filter</h2>",
     unsafe_allow_html=True,
@@ -115,12 +102,12 @@ if selected_kecamatan != "-- Pilih Kecamatan --":
 else:
   df_filtered = df_original
 
-# Filter berdasarkan Nama Kios yang sudah digabung/dibersihkan
+# Filter berdasarkan Kios Gabungan (Kode G & Nama H)
 kios_list = sorted(
-    df_filtered["Kios_Tampil"].dropna().astype(str).unique().tolist()
+    df_filtered["Kios_Gabungan"].dropna().astype(str).unique().tolist()
 )
 selected_nama_kios = st.sidebar.selectbox(
-    "2. Pilih Kios", ["-- Pilih Kios --"] + kios_list
+    "2. Pilih Kios (Kode - Nama)", ["-- Pilih Kios --"] + kios_list
 )
 
 st.sidebar.markdown("---")
@@ -130,7 +117,9 @@ if "verifikasi_dict" not in st.session_state:
   st.session_state.verifikasi_dict = {}
 
 if selected_nama_kios != "-- Pilih Kios --":
-  df_kios_all = df_filtered[df_filtered["Kios_Tampil"] == selected_nama_kios]
+  df_kios_all = df_filtered[
+      df_filtered["Kios_Gabungan"].astype(str) == selected_nama_kios
+  ]
 
   st.sidebar.markdown("#### 🔎 Filter Status Nota:")
   status_filter_options = [
@@ -225,12 +214,12 @@ if selected_nama_kios != "-- Pilih Kios --":
           unsafe_allow_html=True,
       )
       trx_val = row_data.get(col_trx, "-")
-      kios_tampil_val = row_data.get("Kios_Tampil", "-")
+      kios_gabung_val = row_data.get("Kios_Gabungan", "-")
       petani_val = row_data.get(col_petani, "-") if col_petani else "-"
       nik_val = row_data.get("NIK", "-")
       tgl_val = row_data.get("Tanggal Tebus", "-")
 
-      st.markdown(f"**Kios:**\n{kios_tampil_val}")
+      st.markdown(f"**Kios (Kode - Nama):**\n`{kios_gabung_val}`")
       st.markdown(f"**No Transaksi:**\n`{trx_val}`")
       st.markdown(f"**Nama Petani:**\n{petani_val}")
       st.markdown(f"**NIK:**\n{nik_val}")
