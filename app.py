@@ -341,39 +341,46 @@ if selected_nama_kios != "-- Pilih Kios --":
     with col_kanan:
       st.markdown(
           "<h3 style='color: #002b80; font-size: 16px;'>🖼️ Preview Nota"
-          " Bukti</h3>",
+          " Bukti (Utuh)</h3>",
           unsafe_allow_html=True,
       )
       nota_url = row_data.get(col_url, None) if col_url else None
 
       if pd.notna(nota_url) and str(nota_url).startswith("http"):
-        final_url = str(nota_url).strip()
+        raw_url = str(nota_url).strip()
+        embed_url = raw_url
 
-        # Otomatis konversi link Google Drive agar bisa dibaca fungsi st.image()
-        if "drive.google.com" in final_url and "/file/d/" in final_url:
-          try:
-            file_id = final_url.split("/file/d/")[1].split("/")[0]
-            final_url = f"https://drive.google.com/uc?export=view&id={file_id}"
-          except Exception:
-            pass
-
-        try:
-          st.image(
-              final_url,
-              caption=f"Bukti Nota - No Transaksi: {trx_val}",
-              use_container_width=True,
-          )
-        except Exception:
-          st.warning(
-              "Gagal menampilkan preview gambar langsung. Silakan klik tombol di"
-              " bawah untuk membuka gambar:"
-          )
+        if "drive.google.com" in raw_url:
+          if "/file/d/" in raw_url:
+            try:
+              file_id = raw_url.split("/file/d/")[1].split("/")[0]
+              embed_url = f"https://drive.google.com/file/d/{file_id}/preview"
+            except Exception:
+              pass
+          elif "open?id=" in raw_url:
+            try:
+              file_id = raw_url.split("open?id=")[1].split("&")[0]
+              embed_url = f"https://drive.google.com/file/d/{file_id}/preview"
+            except Exception:
+              pass
 
         st.markdown(
-            f"🔗 **[Buka/Download Gambar Asli di Tab Baru]({nota_url})**"
+            f"""
+            <div style="width: 100%; height: 450px; border: 1px solid #ccc; border-radius: 8px; overflow: hidden; background: #000;">
+                <iframe src="{embed_url}" width="100%" height="100%" style="border: none;"></iframe>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            f"<div style='margin-top: 8px;'><a href='{raw_url}'"
+            " target='_blank'>🔗 Buka Gambar Asli Ukuran Penuh di Tab"
+            " Baru</a></div>",
+            unsafe_allow_html=True,
         )
       else:
-        st.warning("Link bukti nota tidak tersedia atau kosong pada baris ini.")
+        st.warning("Link bukti nota tidak tersedia pada baris ini.")
 
     # Navigasi Antar Nota di Bawah
     st.markdown("---")
