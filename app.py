@@ -135,6 +135,34 @@ def resolve_image_url(url: str) -> str:
     return url
 
 
+NOTA_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+    ),
+    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+}
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_nota_image(url: str):
+    """Ambil gambar nota lewat server dengan header ala browser asli.
+    Kembalikan (bytes_gambar, pesan_error, info_debug)."""
+    try:
+        resp = requests.get(url, headers=NOTA_HEADERS, timeout=15, allow_redirects=True)
+    except Exception as ex:
+        return None, "Gagal terhubung ke sumber nota.", f"Exception: {ex}"
+
+    content_type = resp.headers.get("Content-Type", "")
+    debug = f"HTTP {resp.status_code} · Content-Type: {content_type or '-'} · Ukuran: {len(resp.content)} bytes"
+
+    if resp.status_code == 200 and content_type.startswith("image") and len(resp.content) > 500:
+        return resp.content, None, debug
+
+    return None, "Nota tidak dapat ditampilkan langsung dari sumbernya.", debug
+
+
 def update_status_to_gsheet(trx_key, status_value):
     if not APPS_SCRIPT_URL:
         return False
@@ -397,26 +425,14 @@ if selected_nama_kios != "-- Pilih Kios --":
 
             if pd.notna(raw_url) and str(raw_url).strip().startswith("http"):
                 raw_url = str(raw_url).strip()
-                img_url = resolve_image_url(raw_url)
-                safe_key = "".join(ch for ch in current_trx_key if ch.isalnum())
-                st.markdown(
-                    f"""
-                    <div style="text-align:center;">
-                      <img src="{img_url}" referrerpolicy="no-referrer"
-                           style="max-width:100%; border-radius:10px;
-                           border:1px solid #e5e7eb;"
-                           onerror="this.onerror=null; this.style.display='none';
-                                    document.getElementById('nota-err-{safe_key}').style.display='block';">
-                      <div id="nota-err-{safe_key}" style="display:none; padding:16px;
-                           background:#fef2f2; border:1px solid #fecaca; border-radius:8px;
-                           color:#b91c1c; margin-top:8px; font-size:13px;">
-                          Gambar nota tidak bisa ditampilkan langsung di sini
-                          (situs sumber mungkin membatasi akses tersemat).
-                      </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                with st.spinner("Memuat gambar nota..."):
+                    img_bytes, err, debug_info = fetch_nota_image(raw_url)
+                if img_bytes:
+                    st.image(img_bytes, use_container_width=True)
+                else:
+                    st.warning(err)
+                    with st.expander("🔧 Detail teknis (untuk diagnosa)"):
+                        st.code(debug_info or "-")
                 st.markdown(
                     f"<div style='text-align:center; margin-top:8px;'>"
                     f"<a href='{raw_url}' target='_blank'>🔗 Buka Nota di Tab Baru</a></div>",
