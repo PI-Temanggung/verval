@@ -57,7 +57,9 @@ def find_col(keywords):
 
 
 col_kec = find_col(["kecamatan"])
-col_kios_name = find_col(["nama kios", "kios"])
+# Memastikan sistem mendeteksi kolom Nama Kios (mengabaikan kolom Kode Kios untuk filter utama)
+col_kios_name = find_col(["nama kios", "nama_kios", "kios"])
+col_kios_code = find_col(["kode kios", "id kios", "kode"])
 col_trx = find_col(["no transaksi", "kode trx"])
 col_petani = find_col(["nama petani", "petani"])
 col_url = find_col(["url bukti", "link", "url"])
@@ -86,7 +88,7 @@ if selected_kecamatan != "-- Pilih Kecamatan --":
 else:
   df_filtered = df_original
 
-# Filter berdasarkan NAMA KIOS
+# Filter berdasarkan NAMA KIOS (Bukan Kode Kios)
 kios_list = sorted(df_filtered[col_kios_name].dropna().astype(str).unique().tolist())
 selected_nama_kios = st.sidebar.selectbox(
     "2. Pilih Nama Kios", ["-- Pilih Kios --"] + kios_list
@@ -196,10 +198,13 @@ if selected_nama_kios != "-- Pilih Kios --":
           unsafe_allow_html=True,
       )
       trx_val = row_data.get(col_trx, "-")
+      kios_name_val = row_data.get(col_kios_name, "-")
+      kios_code_val = row_data.get(col_kios_code, "-") if col_kios_code else "-"
       petani_val = row_data.get(col_petani, "-") if col_petani else "-"
       nik_val = row_data.get("NIK", "-")
       tgl_val = row_data.get("Tanggal Tebus", "-")
 
+      st.markdown(f"**Nama Kios:**\n{kios_name_val} (`{kios_code_val}`)")
       st.markdown(f"**No Transaksi:**\n`{trx_val}`")
       st.markdown(f"**Nama Petani:**\n{petani_val}")
       st.markdown(f"**NIK:**\n{nik_val}")
