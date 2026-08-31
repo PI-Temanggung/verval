@@ -5,7 +5,7 @@ import streamlit as st
 
 # Konfigurasi Halaman (Lebar responsif untuk PC dan HP)
 st.set_page_config(
-    page_title="Panel Verifikasi Joko Winarno", page_icon="📱", layout="wide"
+    page_title="Panel Verifikasi Kariyawan Tiri", page_icon="📱", layout="wide"
 )
 
 # Link export otomatis dari Spreadsheet Anda
@@ -32,17 +32,6 @@ except Exception as e:
       f"{e}"
   )
   st.stop()
-
-# --- HEADER UTAMA (Ramah Tampilan HP) ---
-st.markdown(
-    """
-    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 10px; border-left: 6px solid #0055ff; margin-bottom: 15px;">
-        <h1 style="color: #002b80; margin: 0; font-size: 22px;">Joko Winarno</h1>
-        <p style="color: #555555; margin: 3px 0 0 0; font-size: 13px;">Panel Verifikasi Nota Pupuk Bersubsidi (Mobile Friendly)</p>
-    </div>
-""",
-    unsafe_allow_html=True,
-)
 
 # --- PENCARIAN KOLOM SECARA OTOMATIS ---
 cols = list(df_original.columns)
@@ -90,6 +79,64 @@ df_original["Kios_Gabungan"] = (
     + df_original[col_nama_kios_pos].astype(str)
 )
 
+# Inisialisasi Session State Verifikasi Lokal
+if "verifikasi_dict" not in st.session_state:
+  st.session_state.verifikasi_dict = {}
+
+# --- HEADER UTAMA & REKAP KABUPATEN TEMANGGUNG DI ATAS ---
+st.markdown(
+    """
+    <div style="background: linear-gradient(135deg, #002b80 0%, #0055ff 100%); padding: 20px; border-radius: 12px; color: white; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <h1 style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: 0.5px;">KARIYAWAN TIRI</h1>
+            <p style="margin: 0; font-size: 14px; background: rgba(255,255,255,0.2); padding: 6px 14px; border-radius: 20px; font-weight: 500;">Ini adalah aplikasi untuk pengecekan transaksi ipubers</p>
+        </div>
+        <p style="margin: 5px 0 15px 0; font-size: 13px; opacity: 0.9;">Rekapitulasi Total Keseluruhan Transaksi Kabupaten Temanggung</p>
+    </div>
+""",
+    unsafe_allow_html=True,
+)
+
+# Hitung Statistik Seluruh Kabupaten Temanggung
+total_kab = len(df_original)
+dicek_kab = sum(
+    1
+    for _, r in df_original.iterrows()
+    if str(r[col_trx]) in st.session_state.verifikasi_dict
+)
+terima_kab = sum(
+    1
+    for _, r in df_original.iterrows()
+    if st.session_state.verifikasi_dict.get(str(r[col_trx])) == "TERIMA"
+)
+ragu_kab = sum(
+    1
+    for _, r in df_original.iterrows()
+    if st.session_state.verifikasi_dict.get(str(r[col_trx])) == "RAGU-RAGU"
+)
+tolak_kab = sum(
+    1
+    for _, r in df_original.iterrows()
+    if st.session_state.verifikasi_dict.get(str(r[col_trx])) == "TOLAK"
+)
+
+# Tampilkan Kotak Metrik Kabupaten Temanggung
+mk1, mk2, mk3, mk4, mk5 = st.columns(5)
+mk1.metric("Total Kab. Temanggung", total_kab)
+mk2.metric("Sudah Dicek", dicek_kab)
+mk3.metric("Terima", terima_kab)
+mk4.metric("Ragu-Ragu", ragu_kab)
+mk5.metric("Tolak", tolak_kab)
+
+# Progress Bar Kabupaten
+prog_kab = float(dicek_kab) / total_kab if total_kab > 0 else 0.0
+st.progress(
+    prog_kab,
+    text=f"Progress Kabupaten Temanggung: {dicek_kab} dari {total_kab} Nota",
+)
+
+st.markdown("---")
+
 # --- SIDEBAR: FILTER NAVIGASI ---
 st.sidebar.markdown(
     "<h2 style='color: #002b80; font-size: 18px;'>🎛️ Filter Data</h2>",
@@ -136,10 +183,6 @@ else:
   selected_tipe_tebus = "-- Semua Tipe --"
 
 st.sidebar.markdown("---")
-
-# Inisialisasi Session State Verifikasi Lokal
-if "verifikasi_dict" not in st.session_state:
-  st.session_state.verifikasi_dict = {}
 
 if selected_nama_kios != "-- Pilih Kios --":
   df_kios_all = df_filtered
@@ -198,46 +241,52 @@ if selected_nama_kios != "-- Pilih Kios --":
     row_data = df_original.loc[row_idx]
     current_trx_key = str(row_data[col_trx])
 
-    # Hitung Statistik
+    # Hitung Statistik Kios Aktif
     total_nota_filtered = len(df_kios_all)
-    sudah_cek = sum(
+    sudah_cek_kios = sum(
         1
         for _, r in df_kios_all.iterrows()
         if str(r[col_trx]) in st.session_state.verifikasi_dict
     )
-    diterima = sum(
+    diterima_kios = sum(
         1
         for _, r in df_kios_all.iterrows()
         if st.session_state.verifikasi_dict.get(str(r[col_trx])) == "TERIMA"
     )
-    ragu = sum(
+    ragu_kios = sum(
         1
         for _, r in df_kios_all.iterrows()
         if st.session_state.verifikasi_dict.get(str(r[col_trx])) == "RAGU-RAGU"
     )
-    ditolak = sum(
+    ditolak_kios = sum(
         1
         for _, r in df_kios_all.iterrows()
         if st.session_state.verifikasi_dict.get(str(r[col_trx])) == "TOLAK"
     )
 
-    # Progress Bar di Sidebar
+    # Progress Bar di Sidebar untuk Kios Terpilih
     progress_val = (
-        float(sudah_cek) / total_nota_filtered
+        float(sudah_cek_kios) / total_nota_filtered
         if total_nota_filtered > 0
         else 0.0
     )
     st.sidebar.markdown("---")
-    st.sidebar.markdown(f"**Progress:** {sudah_cek}/{total_nota_filtered} Nota")
+    st.sidebar.markdown(
+        f"**Progress Kios Ini:** {sudah_cek_kios}/{total_nota_filtered} Nota"
+    )
     st.sidebar.progress(progress_val)
 
-    # Metrik Ringkasan
+    # Metrik Ringkasan Kios
+    st.markdown(
+        "<h4 style='color: #002b80; font-size: 15px;'>📌 Ringkasan Kios Terpilih</h4>",
+        unsafe_allow_html=True,
+    )
     m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("Total", total_nota_filtered)
-    m2.metric("Dicek", sudah_cek)
-    m3.metric("Terima", diterima)
-    m4.metric("Ragu", ragu)
-    m5.metric("Tolak", ditolak)
+    m1.metric("Total Kios", total_nota_filtered)
+    m2.metric("Dicek Kios", sudah_cek_kios)
+    m3.metric("Terima Kios", diterima_kios)
+    m4.metric("Ragu Kios", ragu_kios)
+    m5.metric("Tolak Kios", ditolak_kios)
 
     st.markdown("---")
 
@@ -347,15 +396,44 @@ if selected_nama_kios != "-- Pilih Kios --":
       nota_url = row_data.get(col_url, None) if col_url else None
 
       if pd.notna(nota_url) and str(nota_url).startswith("http"):
-        iframe_html = f"""
-                <iframe src="{nota_url}" width="100%" height="650px" 
-                style="border: 2px solid #0055ff; border-radius: 8px; background-color: white;" 
-                key="{current_trx_key}"></iframe>
-            """
-        st.markdown(iframe_html, unsafe_allow_html=True)
-        st.markdown(f"🔗 [Buka Gambar Full di Tab Baru]({nota_url})")
+        raw_url = str(nota_url).strip()
+        display_img_url = raw_url
+
+        if "drive.google.com" in raw_url:
+          if "/file/d/" in raw_url:
+            try:
+              file_id = raw_url.split("/file/d/")[1].split("/")[0]
+              display_img_url = (
+                  f"https://drive.google.com/uc?export=view&id={file_id}"
+              )
+            except Exception:
+              pass
+          elif "open?id=" in raw_url:
+            try:
+              file_id = raw_url.split("open?id=")[1].split("&")[0]
+              display_img_url = (
+                  f"https://drive.google.com/uc?export=view&id={file_id}"
+              )
+            except Exception:
+              pass
+
+        st.markdown(
+            f"""
+            <div style="width: 100%; background: #ffffff; border: 1px solid #dcdcdc; border-radius: 8px; padding: 10px; text-align: center; box-shadow: 0px 2px 5px rgba(0,0,0,0.05);">
+                <img src="{display_img_url}" style="max-width: 100%; height: auto; max-height: 480px; border-radius: 4px;" alt="Preview Nota"/>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            f"<div style='margin-top: 8px;'><a href='{raw_url}'"
+            " target='_blank'>🔗 Buka Gambar Asli Ukuran Penuh di Tab"
+            " Baru</a></div>",
+            unsafe_allow_html=True,
+        )
       else:
-        st.warning("Link bukti nota tidak tersedia.")
+        st.warning("Link bukti nota tidak tersedia pada baris ini.")
 
     # Navigasi Antar Nota di Bawah
     st.markdown("---")
