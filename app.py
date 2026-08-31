@@ -148,6 +148,7 @@ if selected_nama_kios != "-- Pilih Kios --":
       "Semua Nota",
       "Belum Dicek",
       "TERIMA",
+      "RAGU-RAGU",
       "TOLAK",
   ]
   selected_status_filter = st.sidebar.radio(
@@ -162,6 +163,8 @@ if selected_nama_kios != "-- Pilih Kios --":
     if selected_status_filter == "Belum Dicek" and status == "Belum Dicek":
       filtered_indices.append(idx)
     elif selected_status_filter == "TERIMA" and status == "TERIMA":
+      filtered_indices.append(idx)
+    elif selected_status_filter == "RAGU-RAGU" and status == "RAGU-RAGU":
       filtered_indices.append(idx)
     elif selected_status_filter == "TOLAK" and status == "TOLAK":
       filtered_indices.append(idx)
@@ -203,6 +206,11 @@ if selected_nama_kios != "-- Pilih Kios --":
         for _, r in df_kios_all.iterrows()
         if st.session_state.verifikasi_dict.get(str(r[col_trx])) == "TERIMA"
     )
+    ragu = sum(
+        1
+        for _, r in df_kios_all.iterrows()
+        if st.session_state.verifikasi_dict.get(str(r[col_trx])) == "RAGU-RAGU"
+    )
     ditolak = sum(
         1
         for _, r in df_kios_all.iterrows()
@@ -219,18 +227,18 @@ if selected_nama_kios != "-- Pilih Kios --":
     st.sidebar.markdown(f"**Progress:** {sudah_cek}/{total_nota_filtered} Nota")
     st.sidebar.progress(progress_val)
 
-    # Metrik Ringkasan (Responsive otomatis menyesuaikan HP)
-    m1, m2, m3, m4 = st.columns(4)
+    # Metrik Ringkasan (5 kolom dengan Ragu-Ragu)
+    m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Total", total_nota_filtered)
     m2.metric("Dicek", sudah_cek)
     m3.metric("Terima", diterima)
-    m4.metric("Tolak", ditolak)
+    m4.metric("Ragu", ragu)
+    m5.metric("Tolak", ditolak)
 
     st.markdown("---")
 
-    # --- TAMPILAN UTAMA (Responsif untuk HP / Layar Kecil) ---
-    # Menggunakan st.container() agar di HP elemen tersusun rapi ke bawah
-    col_kiri, col_kanan = st.columns([1, 1], gap="medium")
+    # --- TAMPILAN UTAMA (Preview Nota Diperlebar/Diperpanjang & Detail Kiri) ---
+    col_kiri, col_kanan = st.columns([1, 1.3], gap="medium")
 
     with col_kiri:
       st.markdown(
@@ -258,21 +266,27 @@ if selected_nama_kios != "-- Pilih Kios --":
           unsafe_allow_html=True,
       )
 
+      # Format alokasi pupuk ke bawah (vertikal)
       pupuk_info = []
       for p in ["Urea", "NPK", "SP36", "ZA", "Organik"]:
         if p in df_original.columns and pd.notna(row_data.get(p)):
-          pupuk_info.append(f"{p}: **{row_data.get(p)} kg**")
+          pupuk_info.append(f"- {p} : **{row_data.get(p)} kg**")
+
       if pupuk_info:
-        st.markdown(f"🌾 **Alokasi:** " + " | ".join(pupuk_info))
+        st.markdown(f"🌾 **ALOKASI:**\n\n" + "\n".join(pupuk_info))
 
       current_status = st.session_state.verifikasi_dict.get(
           current_trx_key, "Belum Dicek"
       )
-      status_color = (
-          "green"
-          if current_status == "TERIMA"
-          else ("red" if current_status == "TOLAK" else "orange")
-      )
+      if current_status == "TERIMA":
+        status_color = "green"
+      elif current_status == "RAGU-RAGU":
+        status_color = "darkorange"
+      elif current_status == "TOLAK":
+        status_color = "red"
+      else:
+        status_color = "gray"
+
       st.markdown(
           f"Status: <span"
           f" style='color:{status_color}; font-weight:bold;'>{current_status}</span>",
@@ -282,7 +296,7 @@ if selected_nama_kios != "-- Pilih Kios --":
       st.markdown("---")
       st.markdown("#### Aksi Verifikasi:")
 
-      col_btn1, col_btn2 = st.columns(2)
+      col_btn1, col_btn2, col_btn3 = st.columns(3)
       with col_btn1:
         if st.button("✅ TERIMA", type="primary", key=f"terima_{row_idx}"):
           st.session_state.verifikasi_dict[current_trx_key] = "TERIMA"
@@ -291,6 +305,13 @@ if selected_nama_kios != "-- Pilih Kios --":
           st.rerun()
 
       with col_btn2:
+        if st.button("⚠️ RAGU", key=f"ragu_{row_idx}"):
+          st.session_state.verifikasi_dict[current_trx_key] = "RAGU-RAGU"
+          if pos < len(filtered_indices) - 1:
+            st.session_state.current_pos += 1
+          st.rerun()
+
+      with col_btn3:
         if st.button("❌ TOLAK", key=f"tolak_{row_idx}"):
           st.session_state.verifikasi_dict[current_trx_key] = "TOLAK"
           if pos < len(filtered_indices) - 1:
@@ -305,15 +326,15 @@ if selected_nama_kios != "-- Pilih Kios --":
     with col_kanan:
       st.markdown(
           "<h3 style='color: #002b80; font-size: 16px;'>🖼️ Preview Nota"
-          " Bukti</h3>",
+          " Bukti (Lebih Luas)</h3>",
           unsafe_allow_html=True,
       )
       nota_url = row_data.get(col_url, None) if col_url else None
 
       if pd.notna(nota_url) and str(nota_url).startswith("http"):
-        # Ukuran tinggi iframe disesuaikan agar pas di layar HP maupun Laptop
+        # Ukuran iframe diperpanjang menjadi 650px agar preview lebih optimal
         st.markdown(
-            f'<iframe src="{nota_url}" width="100%" height="450px"'
+            f'<iframe src="{nota_url}" width="100%" height="650px"'
             ' style="border: 2px solid #0055ff; border-radius: 8px;'
             ' background-color: white;"></iframe>',
             unsafe_allow_html=True,
