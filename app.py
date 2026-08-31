@@ -341,19 +341,18 @@ if selected_nama_kios != "-- Pilih Kios --":
     with col_kanan:
       st.markdown(
           "<h3 style='color: #002b80; font-size: 16px;'>🖼️ Preview Nota"
-          " Bukti (Lebih Luas)</h3>",
+          " Bukti (Gambar Utuh)</h3>",
           unsafe_allow_html=True,
       )
       nota_url = row_data.get(col_url, None) if col_url else None
 
       if pd.notna(nota_url) and str(nota_url).startswith("http"):
-        st.markdown(
-            f'<iframe src="{nota_url}" width="100%" height="650px"'
-            ' style="border: 2px solid #0055ff; border-radius: 8px;'
-            ' background-color: white;"></iframe>',
-            unsafe_allow_html=True,
+        st.image(
+            nota_url,
+            caption=f"Bukti Nota - No Transaksi: {trx_val}",
+            use_container_width=True,
         )
-        st.markdown(f"🔗 [Buka Gambar Full di Tab Baru]({nota_url})")
+        st.markdown(f"🔗 [Buka Gambar Asli di Tab Baru]({nota_url})")
       else:
         st.warning("Link bukti nota tidak tersedia.")
 
