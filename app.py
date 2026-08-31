@@ -402,7 +402,8 @@ if selected_nama_kios != "-- Pilih Kios --":
                 st.markdown(
                     f"""
                     <div style="text-align:center;">
-                      <img src="{img_url}" style="max-width:100%; border-radius:10px;
+                      <img src="{img_url}" referrerpolicy="no-referrer"
+                           style="max-width:100%; border-radius:10px;
                            border:1px solid #e5e7eb;"
                            onerror="this.onerror=null; this.style.display='none';
                                     document.getElementById('nota-err-{safe_key}').style.display='block';">
