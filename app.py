@@ -341,20 +341,39 @@ if selected_nama_kios != "-- Pilih Kios --":
     with col_kanan:
       st.markdown(
           "<h3 style='color: #002b80; font-size: 16px;'>🖼️ Preview Nota"
-          " Bukti (Gambar Utuh)</h3>",
+          " Bukti</h3>",
           unsafe_allow_html=True,
       )
       nota_url = row_data.get(col_url, None) if col_url else None
 
       if pd.notna(nota_url) and str(nota_url).startswith("http"):
-        st.image(
-            nota_url,
-            caption=f"Bukti Nota - No Transaksi: {trx_val}",
-            use_container_width=True,
+        final_url = str(nota_url).strip()
+
+        # Otomatis konversi link Google Drive agar bisa dibaca fungsi st.image()
+        if "drive.google.com" in final_url and "/file/d/" in final_url:
+          try:
+            file_id = final_url.split("/file/d/")[1].split("/")[0]
+            final_url = f"https://drive.google.com/uc?export=view&id={file_id}"
+          except Exception:
+            pass
+
+        try:
+          st.image(
+              final_url,
+              caption=f"Bukti Nota - No Transaksi: {trx_val}",
+              use_container_width=True,
+          )
+        except Exception:
+          st.warning(
+              "Gagal menampilkan preview gambar langsung. Silakan klik tombol di"
+              " bawah untuk membuka gambar:"
+          )
+
+        st.markdown(
+            f"🔗 **[Buka/Download Gambar Asli di Tab Baru]({nota_url})**"
         )
-        st.markdown(f"🔗 [Buka Gambar Asli di Tab Baru]({nota_url})")
       else:
-        st.warning("Link bukti nota tidak tersedia.")
+        st.warning("Link bukti nota tidak tersedia atau kosong pada baris ini.")
 
     # Navigasi Antar Nota di Bawah
     st.markdown("---")
