@@ -3,9 +3,9 @@ import openpyxl
 import pandas as pd
 import streamlit as st
 
-# Konfigurasi Halaman
+# Konfigurasi Halaman (Lebar responsif untuk PC dan HP)
 st.set_page_config(
-    page_title="Panel Verifikasi Joko Winarno", page_icon="🔍", layout="wide"
+    page_title="Panel Verifikasi Joko Winarno", page_icon="📱", layout="wide"
 )
 
 # Link export otomatis dari Spreadsheet Anda
@@ -19,7 +19,6 @@ SHEET_URL = (
 def load_excel_data():
   xls = pd.ExcelFile(SHEET_URL)
   sheet_name = xls.sheet_names[0]
-  # header=0 artinya baris pertama adalah judul kolom
   df = pd.read_excel(SHEET_URL, sheet_name=sheet_name, header=0)
   return df, sheet_name
 
@@ -34,18 +33,18 @@ except Exception as e:
   )
   st.stop()
 
-# --- HEADER UTAMA ---
+# --- HEADER UTAMA (Ramah Tampilan HP) ---
 st.markdown(
     """
-    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 6px solid #0055ff; margin-bottom: 20px;">
-        <h1 style="color: #002b80; margin: 0; font-size: 26px;">Joko Winarno</h1>
-        <p style="color: #555555; margin: 5px 0 0 0; font-size: 15px;">Panel Verifikasi & Monitoring Nota Kios Pupuk Bersubsidi (IPubers)</p>
+    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 10px; border-left: 6px solid #0055ff; margin-bottom: 15px;">
+        <h1 style="color: #002b80; margin: 0; font-size: 22px;">Joko Winarno</h1>
+        <p style="color: #555555; margin: 3px 0 0 0; font-size: 13px;">Panel Verifikasi Nota Pupuk Bersubsidi (Mobile Friendly)</p>
     </div>
 """,
     unsafe_allow_html=True,
 )
 
-# --- PENCARIAN KOLOM BERDASARKAN NAMA & POSISI (G dan H) ---
+# --- PENCARIAN KOLOM SECARA OTOMATIS ---
 cols = list(df_original.columns)
 
 
@@ -62,14 +61,19 @@ col_trx = find_col(["no transaksi", "kode trx", "transaksi"])
 col_petani = find_col(["nama petani", "petani"])
 col_url = find_col(["url bukti", "link", "url"])
 
-# Memastikan Kolom G (Indeks 6) dan Kolom H (Indeks 7) diambil secara pasti
-# (Python menghitung kolom mulai dari 0, jadi Kolom G = indeks 6, Kolom H = indeks 7)
+# Kolom G (indeks 6) & H (indeks 7) untuk Kios
 if len(cols) >= 8:
-  col_kode_kios_pos = cols[6]  # Kolom G
-  col_nama_kios_pos = cols[7]  # Kolom H
+  col_kode_kios_pos = cols[6]
+  col_nama_kios_pos = cols[7]
 else:
   col_kode_kios_pos = cols[-2] if len(cols) > 1 else cols[0]
   col_nama_kios_pos = cols[-1]
+
+# Kolom X (indeks 23) untuk Tipe Tebus (Individu / Kelompok)
+if len(cols) >= 24:
+  col_tipe_tebus = cols[23]
+else:
+  col_tipe_tebus = find_col(["tipe", "tebus", "jenis"])
 
 if not col_kec or not col_trx:
   st.error(
@@ -78,16 +82,16 @@ if not col_kec or not col_trx:
   )
   st.stop()
 
-# --- GABUNGKAN KODE KIOS (G) DAN NAMA KIOS (H) MENJADI SATU ---
+# --- GABUNGKAN KODE KIOS (G) DAN NAMA KIOS (H) ---
 df_original["Kios_Gabungan"] = (
     df_original[col_kode_kios_pos].astype(str)
     + " - "
     + df_original[col_nama_kios_pos].astype(str)
 )
 
-# --- SIDEBAR: FILTER BERBASIS KECAMATAN & KIOS GABUNGAN ---
+# --- SIDEBAR: FILTER NAVIGASI ---
 st.sidebar.markdown(
-    "<h2 style='color: #002b80; font-size: 20px;'>🎛️ Navigasi & Filter</h2>",
+    "<h2 style='color: #002b80; font-size: 18px;'>🎛️ Filter Data</h2>",
     unsafe_allow_html=True,
 )
 st.sidebar.markdown("---")
@@ -102,7 +106,7 @@ if selected_kecamatan != "-- Pilih Kecamatan --":
 else:
   df_filtered = df_original
 
-# Filter berdasarkan Kios Gabungan (Kode G & Nama H)
+# Filter Kios Gabungan
 kios_list = sorted(
     df_filtered["Kios_Gabungan"].dropna().astype(str).unique().tolist()
 )
@@ -110,16 +114,34 @@ selected_nama_kios = st.sidebar.selectbox(
     "2. Pilih Kios (Kode - Nama)", ["-- Pilih Kios --"] + kios_list
 )
 
+if selected_nama_kios != "-- Pilih Kios --":
+  df_filtered = df_filtered[
+      df_filtered["Kios_Gabungan"].astype(str) == selected_nama_kios
+  ]
+
+# Filter Tipe Tebus (Kolom X: Individu / Kelompok)
+if col_tipe_tebus and col_tipe_tebus in df_filtered.columns:
+  tipe_list = sorted(
+      df_filtered[col_tipe_tebus].dropna().astype(str).unique().tolist()
+  )
+  selected_tipe_tebus = st.sidebar.selectbox(
+      "3. Tipe Tebus", ["-- Semua Tipe --"] + tipe_list
+  )
+  if selected_tipe_tebus != "-- Semua Tipe --":
+    df_filtered = df_filtered[
+        df_filtered[col_tipe_tebus].astype(str) == selected_tipe_tebus
+    ]
+else:
+  selected_tipe_tebus = "-- Semua Tipe --"
+
 st.sidebar.markdown("---")
 
-# Inisialisasi Session State Verifikasi
+# Inisialisasi Session State Verifikasi Lokal
 if "verifikasi_dict" not in st.session_state:
   st.session_state.verifikasi_dict = {}
 
 if selected_nama_kios != "-- Pilih Kios --":
-  df_kios_all = df_filtered[
-      df_filtered["Kios_Gabungan"].astype(str) == selected_nama_kios
-  ]
+  df_kios_all = df_filtered
 
   st.sidebar.markdown("#### 🔎 Filter Status Nota:")
   status_filter_options = [
@@ -149,17 +171,17 @@ if selected_nama_kios != "-- Pilih Kios --":
   if len(filtered_indices) == 0:
     st.warning(
         f"Tidak ada data nota dengan status '{selected_status_filter}' untuk"
-        " kios ini."
+        " filter ini."
     )
   else:
     if "current_pos" not in st.session_state:
       st.session_state.current_pos = 0
     if (
-        "last_kios" not in st.session_state
-        or st.session_state.last_kios != selected_nama_kios
+        "last_filter" not in st.session_state
+        or st.session_state.last_filter != selected_nama_kios
     ):
       st.session_state.current_pos = 0
-      st.session_state.last_kios = selected_nama_kios
+      st.session_state.last_filter = selected_nama_kios
 
     if st.session_state.current_pos >= len(filtered_indices):
       st.session_state.current_pos = 0
@@ -169,8 +191,8 @@ if selected_nama_kios != "-- Pilih Kios --":
     row_data = df_original.loc[row_idx]
     current_trx_key = str(row_data[col_trx])
 
-    # Hitung Statistik Kios
-    total_nota_kios = len(df_kios_all)
+    # Hitung Statistik
+    total_nota_filtered = len(df_kios_all)
     sudah_cek = sum(
         1
         for _, r in df_kios_all.iterrows()
@@ -187,29 +209,32 @@ if selected_nama_kios != "-- Pilih Kios --":
         if st.session_state.verifikasi_dict.get(str(r[col_trx])) == "TOLAK"
     )
 
-    # Progress Bar
+    # Progress Bar di Sidebar
     progress_val = (
-        float(sudah_cek) / total_nota_kios if total_nota_kios > 0 else 0.0
+        float(sudah_cek) / total_nota_filtered
+        if total_nota_filtered > 0
+        else 0.0
     )
     st.sidebar.markdown("---")
-    st.sidebar.markdown(f"**Progress Kios:** {sudah_cek}/{total_nota_kios} Nota")
+    st.sidebar.markdown(f"**Progress:** {sudah_cek}/{total_nota_filtered} Nota")
     st.sidebar.progress(progress_val)
 
-    # Metrik Atas
+    # Metrik Ringkasan (Responsive otomatis menyesuaikan HP)
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total Nota Kios", total_nota_kios)
-    m2.metric("Sudah Diverifikasi", sudah_cek)
-    m3.metric("Diterima", diterima)
-    m4.metric("Ditolak", ditolak)
+    m1.metric("Total", total_nota_filtered)
+    m2.metric("Dicek", sudah_cek)
+    m3.metric("Terima", diterima)
+    m4.metric("Tolak", ditolak)
 
     st.markdown("---")
 
-    # Layout Utama
-    col_kiri, col_kanan = st.columns([1, 2], gap="large")
+    # --- TAMPILAN UTAMA (Responsif untuk HP / Layar Kecil) ---
+    # Menggunakan st.container() agar di HP elemen tersusun rapi ke bawah
+    col_kiri, col_kanan = st.columns([1, 1], gap="medium")
 
     with col_kiri:
       st.markdown(
-          "<h3 style='color: #002b80; font-size: 18px;'>📄 Detail"
+          "<h3 style='color: #002b80; font-size: 16px;'>📄 Detail"
           " Transaksi</h3>",
           unsafe_allow_html=True,
       )
@@ -218,19 +243,27 @@ if selected_nama_kios != "-- Pilih Kios --":
       petani_val = row_data.get(col_petani, "-") if col_petani else "-"
       nik_val = row_data.get("NIK", "-")
       tgl_val = row_data.get("Tanggal Tebus", "-")
+      tipe_val = (
+          row_data.get(col_tipe_tebus, "-") if col_tipe_tebus else "-"
+      )
 
-      st.markdown(f"**Kios (Kode - Nama):**\n`{kios_gabung_val}`")
-      st.markdown(f"**No Transaksi:**\n`{trx_val}`")
-      st.markdown(f"**Nama Petani:**\n{petani_val}")
-      st.markdown(f"**NIK:**\n{nik_val}")
-      st.markdown(f"**Tanggal Tebus:**\n{tgl_val}")
+      st.markdown(f"**Kios:** `{kios_gabung_val}`")
+      st.markdown(f"**No Transaksi:** `{trx_val}`")
+      st.markdown(f"**Nama Petani:** {petani_val}")
+      st.markdown(f"**NIK:** {nik_val}")
+      st.markdown(f"**Tanggal:** {tgl_val}")
+      st.markdown(
+          f"**Tipe Tebus:** <span style='color:blue;"
+          f" font-weight:bold;'>{tipe_val}</span>",
+          unsafe_allow_html=True,
+      )
 
       pupuk_info = []
       for p in ["Urea", "NPK", "SP36", "ZA", "Organik"]:
         if p in df_original.columns and pd.notna(row_data.get(p)):
           pupuk_info.append(f"{p}: **{row_data.get(p)} kg**")
       if pupuk_info:
-        st.markdown(f"🌾 **Alokasi Pupuk:**\n" + "\n".join(pupuk_info))
+        st.markdown(f"🌾 **Alokasi:** " + " | ".join(pupuk_info))
 
       current_status = st.session_state.verifikasi_dict.get(
           current_trx_key, "Belum Dicek"
@@ -248,118 +281,90 @@ if selected_nama_kios != "-- Pilih Kios --":
 
       st.markdown("---")
       st.markdown("#### Aksi Verifikasi:")
-      if st.button("✅ TERIMA", type="primary", key=f"terima_{row_idx}"):
-        st.session_state.verifikasi_dict[current_trx_key] = "TERIMA"
-        if pos < len(filtered_indices) - 1:
-          st.session_state.current_pos += 1
-        st.rerun()
 
-      if st.button("❌ TOLAK", key=f"tolak_{row_idx}"):
-        st.session_state.verifikasi_dict[current_trx_key] = "TOLAK"
-        if pos < len(filtered_indices) - 1:
-          st.session_state.current_pos += 1
-        st.rerun()
+      col_btn1, col_btn2 = st.columns(2)
+      with col_btn1:
+        if st.button("✅ TERIMA", type="primary", key=f"terima_{row_idx}"):
+          st.session_state.verifikasi_dict[current_trx_key] = "TERIMA"
+          if pos < len(filtered_indices) - 1:
+            st.session_state.current_pos += 1
+          st.rerun()
+
+      with col_btn2:
+        if st.button("❌ TOLAK", key=f"tolak_{row_idx}"):
+          st.session_state.verifikasi_dict[current_trx_key] = "TOLAK"
+          if pos < len(filtered_indices) - 1:
+            st.session_state.current_pos += 1
+          st.rerun()
 
       if st.button("🔄 Reset Status", key=f"reset_{row_idx}"):
         if current_trx_key in st.session_state.verifikasi_dict:
           del st.session_state.verifikasi_dict[current_trx_key]
         st.rerun()
 
-      st.markdown("---")
-      st.markdown("#### Navigasi Nota:")
-      if st.button("⬅️ Sebelumnya", key=f"prev_{row_idx}"):
-        if pos > 0:
-          st.session_state.current_pos -= 1
-          st.rerun()
-
-      st.markdown(
-          f"<p style='text-align: center; font-weight: bold; margin: 5px"
-          f" 0;'>Nota ke-{pos + 1} dari {len(filtered_indices)}</p>",
-          unsafe_allow_html=True,
-      )
-
-      if st.button("Selanjutnya ➡️", key=f"next_{row_idx}"):
-        if pos < len(filtered_indices) - 1:
-          st.session_state.current_pos += 1
-          st.rerun()
-
     with col_kanan:
       st.markdown(
-          "<h3 style='color: #002b80; font-size: 18px;'>🖼️ Preview Nota"
-          " (Diperbesar)</h3>",
+          "<h3 style='color: #002b80; font-size: 16px;'>🖼️ Preview Nota"
+          " Bukti</h3>",
           unsafe_allow_html=True,
       )
       nota_url = row_data.get(col_url, None) if col_url else None
 
       if pd.notna(nota_url) and str(nota_url).startswith("http"):
+        # Ukuran tinggi iframe disesuaikan agar pas di layar HP maupun Laptop
         st.markdown(
-            f'<iframe src="{nota_url}" width="100%" height="750px"'
+            f'<iframe src="{nota_url}" width="100%" height="450px"'
             ' style="border: 2px solid #0055ff; border-radius: 8px;'
             ' background-color: white;"></iframe>',
             unsafe_allow_html=True,
         )
-        st.markdown(f"🔗 [Buka Link Asli di Tab Baru]({nota_url})")
+        st.markdown(f"🔗 [Buka Gambar Full di Tab Baru]({nota_url})")
       else:
-        st.warning(
-            "Link atau URL bukti nota tidak tersedia pada baris data ini."
-        )
+        st.warning("Link bukti nota tidak tersedia.")
 
-# --- PANEL DOWNLOAD HASIL ---
+    # Navigasi Antar Nota di Bawah
+    st.markdown("---")
+    nav_c1, nav_c2, nav_c3 = st.columns([1, 2, 1])
+    with nav_c1:
+      if st.button("⬅️ Sebelumnya", key=f"prev_{row_idx}"):
+        if pos > 0:
+          st.session_state.current_pos -= 1
+          st.rerun()
+    with nav_c2:
+      st.markdown(
+          f"<p style='text-align: center; font-weight: bold; margin: 5px"
+          f" 0;'>Nota ke-{pos + 1} dari {len(filtered_indices)}</p>",
+          unsafe_allow_html=True,
+      )
+    with nav_c3:
+      if st.button("Selanjutnya ➡️", key=f"next_{row_idx}"):
+        if pos < len(filtered_indices) - 1:
+          st.session_state.current_pos += 1
+          st.rerun()
+
+# --- PANEL DOWNLOAD HASIL REKAP ---
 st.markdown("---")
 st.markdown(
-    "<h3 style='color: #002b80; font-size: 18px;'>📥 Download Hasil"
+    "<h3 style='color: #002b80; font-size: 16px;'>📥 Download Hasil"
     " Verifikasi Excel</h3>",
     unsafe_allow_html=True,
 )
 
-dl_col1, dl_col2 = st.columns(2)
+if st.button("📊 Download Rekap Data Lengkap (Excel)", type="primary"):
+  df_export = df_original.copy()
+  status_list = [
+      st.session_state.verifikasi_dict.get(str(row[col_trx]), "Belum Dicek")
+      for _, row in df_export.iterrows()
+  ]
+  df_export["Status_Verifikasi"] = status_list
 
-with dl_col1:
-  if st.button("📊 Download Semua Data", type="primary"):
-    df_export_all = df_original.copy()
-    status_list_all = [
-        st.session_state.verifikasi_dict.get(str(row[col_trx]), "Belum Dicek")
-        for _, row in df_export_all.iterrows()
-    ]
-    df_export_all["Status_Verifikasi"] = status_list_all
+  output = io.BytesIO()
+  with pd.ExcelWriter(output, engine="openpyxl") as writer:
+    df_export.to_excel(writer, sheet_name=active_sheet, index=False)
 
-    output_all = io.BytesIO()
-    with pd.ExcelWriter(output_all, engine="openpyxl") as writer:
-      df_export_all.to_excel(writer, sheet_name=active_sheet, index=False)
-
-    st.download_button(
-        label="⬇️ Simpan File (Semua Data)",
-        data=output_all.getvalue(),
-        file_name="Hasil_Verifikasi_Semua_Data.xlsx",
-        mime=(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ),
-    )
-
-with dl_col2:
-  if st.button("📊 Download Data Terpilih Saja"):
-    if selected_nama_kios != "-- Pilih Kios --":
-      df_export_filtered = df_kios_all.copy()
-    elif selected_kecamatan != "-- Pilih Kecamatan --":
-      df_export_filtered = df_filtered.copy()
-    else:
-      df_export_filtered = df_original.copy()
-
-    status_list_filtered = [
-        st.session_state.verifikasi_dict.get(str(row[col_trx]), "Belum Dicek")
-        for _, row in df_export_filtered.iterrows()
-    ]
-    df_export_filtered["Status_Verifikasi"] = status_list_filtered
-
-    output_filtered = io.BytesIO()
-    with pd.ExcelWriter(output_filtered, engine="openpyxl") as writer:
-      df_export_filtered.to_excel(writer, sheet_name=active_sheet, index=False)
-
-    st.download_button(
-        label="⬇️ Simpan File (Data Terpilih)",
-        data=output_filtered.getvalue(),
-        file_name="Hasil_Verifikasi_Terpilih.xlsx",
-        mime=(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ),
-    )
+  st.download_button(
+      label="⬇️ Klik Disini untuk Menyimpan File Excel",
+      data=output.getvalue(),
+      file_name="Hasil_Verifikasi_Nota.xlsx",
+      mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  )
