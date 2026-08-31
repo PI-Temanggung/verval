@@ -19,7 +19,8 @@ SHEET_URL = (
 def load_excel_data():
   xls = pd.ExcelFile(SHEET_URL)
   sheet_name = xls.sheet_names[0]
-  df = pd.read_excel(SHEET_URL, sheet_name=sheet_name, header=0)
+  # dtype=str memastikan semua kolom termasuk NIK dibaca sebagai teks utuh
+  df = pd.read_excel(SHEET_URL, sheet_name=sheet_name, header=0, dtype=str)
   return df, sheet_name
 
 
@@ -59,6 +60,7 @@ def find_col(keywords):
 col_kec = find_col(["kecamatan"])
 col_trx = find_col(["no transaksi", "kode trx", "transaksi"])
 col_petani = find_col(["nama petani", "petani"])
+col_nik = find_col(["nik"])
 col_url = find_col(["url bukti", "link", "url"])
 
 # Kolom G (indeks 6) & H (indeks 7) untuk Kios
@@ -227,7 +229,7 @@ if selected_nama_kios != "-- Pilih Kios --":
     st.sidebar.markdown(f"**Progress:** {sudah_cek}/{total_nota_filtered} Nota")
     st.sidebar.progress(progress_val)
 
-    # Metrik Ringkasan (5 kolom dengan Ragu-Ragu)
+    # Metrik Ringkasan
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Total", total_nota_filtered)
     m2.metric("Dicek", sudah_cek)
@@ -237,7 +239,7 @@ if selected_nama_kios != "-- Pilih Kios --":
 
     st.markdown("---")
 
-    # --- TAMPILAN UTAMA (Preview Nota Diperlebar/Diperpanjang & Detail Kiri) ---
+    # --- TAMPILAN UTAMA ---
     col_kiri, col_kanan = st.columns([1, 1.3], gap="medium")
 
     with col_kiri:
@@ -249,7 +251,16 @@ if selected_nama_kios != "-- Pilih Kios --":
       trx_val = row_data.get(col_trx, "-")
       kios_gabung_val = row_data.get("Kios_Gabungan", "-")
       petani_val = row_data.get(col_petani, "-") if col_petani else "-"
-      nik_val = row_data.get("NIK", "-")
+
+      # Ambil NIK dan pastikan bersih sebagai string utuh
+      nik_val = (
+          str(row_data[col_nik]).strip()
+          if col_nik and pd.notna(row_data.get(col_nik))
+          else "-"
+      )
+      if nik_val.endswith(".0"):
+        nik_val = nik_val[:-2]
+
       tgl_val = row_data.get("Tanggal Tebus", "-")
       tipe_val = (
           row_data.get(col_tipe_tebus, "-") if col_tipe_tebus else "-"
@@ -258,7 +269,7 @@ if selected_nama_kios != "-- Pilih Kios --":
       st.markdown(f"**Kios:** `{kios_gabung_val}`")
       st.markdown(f"**No Transaksi:** `{trx_val}`")
       st.markdown(f"**Nama Petani:** {petani_val}")
-      st.markdown(f"**NIK:** {nik_val}")
+      st.markdown(f"**NIK:** `{nik_val}`")  # Ditampilkan dalam format kode/teks
       st.markdown(f"**Tanggal:** {tgl_val}")
       st.markdown(
           f"**Tipe Tebus:** <span style='color:blue;"
@@ -270,7 +281,10 @@ if selected_nama_kios != "-- Pilih Kios --":
       pupuk_info = []
       for p in ["Urea", "NPK", "SP36", "ZA", "Organik"]:
         if p in df_original.columns and pd.notna(row_data.get(p)):
-          pupuk_info.append(f"- {p} : **{row_data.get(p)} kg**")
+          val_p = str(row_data.get(p)).strip()
+          if val_p.endswith(".0"):
+            val_p = val_p[:-2]
+          pupuk_info.append(f"- {p} : **{val_p} kg**")
 
       if pupuk_info:
         st.markdown(f"🌾 **ALOKASI:**\n\n" + "\n".join(pupuk_info))
@@ -332,7 +346,6 @@ if selected_nama_kios != "-- Pilih Kios --":
       nota_url = row_data.get(col_url, None) if col_url else None
 
       if pd.notna(nota_url) and str(nota_url).startswith("http"):
-        # Ukuran iframe diperpanjang menjadi 650px agar preview lebih optimal
         st.markdown(
             f'<iframe src="{nota_url}" width="100%" height="650px"'
             ' style="border: 2px solid #0055ff; border-radius: 8px;'
