@@ -3,5 +3,3 @@ pandas
 openpyxl
 gspread
 google-auth
-requests
-Pillow
