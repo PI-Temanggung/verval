@@ -180,7 +180,7 @@ def update_status_to_gsheet(trx_key, status_value):
             st.cache_data.clear()
             return True, None
         elif result == "not_found":
-            return False, f"No. Transaksi '{trx_key}' tidak ditemukan di spreadsheet oleh Apps Script."
+            return False, f"Kode Transaksi '{trx_key}' tidak ditemukan di spreadsheet oleh Apps Script."
         else:
             return False, f"Apps Script gagal: {body.get('message', result)}"
     except Exception as ex:
@@ -201,7 +201,9 @@ except Exception as e:
 
 cols = list(df_original.columns)
 col_kec = find_col(cols, ["kecamatan"])
-col_trx = find_col(cols, ["no transaksi", "kode trx", "transaksi"])
+# Kunci pencocokan transaksi: KODE Transaksi di kolom J (posisi ke-10),
+# bukan No Transaksi lagi. Contoh nilai: "S09NY1\2004Q1".
+col_trx = cols[9] if len(cols) >= 10 else find_col(cols, ["kode transaksi", "kode trx", "no transaksi", "transaksi"])
 col_petani = find_col(cols, ["nama petani", "petani"])
 col_nik = find_col(cols, ["nik"])
 col_url = find_col(cols, ["url bukti", "link", "url"])
@@ -212,8 +214,22 @@ col_nama_kios_pos = cols[7] if len(cols) >= 8 else cols[-1]
 col_tipe_tebus = cols[23] if len(cols) >= 24 else find_col(cols, ["tipe", "tebus", "jenis"])
 
 if not col_kec or not col_trx:
-    st.error(f"Kolom 'Kecamatan' atau 'No Transaksi' tidak ditemukan. Kolom terdeteksi: {cols}")
+    st.error(f"Kolom 'Kecamatan' atau 'Kode Transaksi' tidak ditemukan. Kolom terdeteksi: {cols}")
     st.stop()
+
+
+def clean_trx_value(val):
+    """Bersihkan akhiran '.0' yang sering muncul saat pandas membaca kolom
+    angka dengan dtype=str (mis. 16394006 -> '16394006.0'), supaya No
+    Transaksi yang dikirim ke Apps Script selalu cocok persis dengan yang
+    ada di spreadsheet."""
+    s = str(val).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    return s
+
+
+df_original[col_trx] = df_original[col_trx].map(clean_trx_value)
 
 df_original["Kios_Gabungan"] = (
     df_original[col_kode_kios_pos].astype(str) + " - " + df_original[col_nama_kios_pos].astype(str)
@@ -373,7 +389,7 @@ if selected_nama_kios != "-- Pilih Kios --":
             st.markdown('<div class="kt-label">Kios</div>', unsafe_allow_html=True)
             st.markdown(f'<div class="kt-value">{row_data.get("Kios_Gabungan", "-")}</div>', unsafe_allow_html=True)
 
-            st.markdown('<div class="kt-label">No. Transaksi</div>', unsafe_allow_html=True)
+            st.markdown('<div class="kt-label">Kode Transaksi</div>', unsafe_allow_html=True)
             st.markdown(f'<div class="kt-value">{current_trx_key}</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="kt-label">Nama Petani / NIK</div>', unsafe_allow_html=True)
