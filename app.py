@@ -1,35 +1,19 @@
 import io
 import openpyxl
 import pandas as pd
+import requests
 import streamlit as st
-import gspread
-from google.oauth2.service_account import Credentials
 
 # Konfigurasi Halaman (Lebar responsif untuk PC dan HP)
 st.set_page_config(
     page_title="Panel Verifikasi Kariyawan Tiri", page_icon="📱", layout="wide"
 )
 
-# Link export cepat untuk membaca data agar preview nota tetap lancar & cepat
+# 1. Link export cepat untuk membaca data Excel dari Google Spreadsheet
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1ikC39Z3V9w5yypVDGVgMsfiuSInRRgvR/export?format=xlsx"
 
-# Nama file Google Spreadsheet Anda di Google Drive (untuk proses tulis otomatis)
-SPREADSHEET_NAME = "Nama_File_Spreadsheet_Anda" # Sesuaikan dengan nama file spreadsheet Anda
-
-# --- KONEKSI KE GOOGLE SHEETS UNTUK TULIS DATA (BACKGROUND) ---
-@st.cache_resource
-def get_gspread_client():
-    try:
-        creds_dict = dict(st.secrets["gcp_service_account"])
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        client = gspread.authorize(creds)
-        return client
-    except Exception as e:
-        return None
+# 2. URL Web App dari Google Apps Script Anda (Sudah terhubung otomatis)
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx5mnQ71mpsG_K66m0-4ASG_aj0X7xKUDJXoMIHNvr5c5J0oAqgx25aVeepzaL2Qh5LRQ/exec"
 
 # Memuat data live dari Google Spreadsheet (Cache 30 detik agar update cepat)
 @st.cache_data(ttl=30)
@@ -43,48 +27,26 @@ try:
     df_original, active_sheet = load_excel_data()
 except Exception as e:
     st.error(
-        "Gagal membaca data dari Google Spreadsheet. Pastikan akses sharing diset ke 'Anyone with the link can view' atau bagikan ke email service account.\n\nError: "
+        "Gagal membaca data dari Google Spreadsheet. Pastikan link Google Sheet sudah diset ke 'Anyone with the link can view'.\n\nError: "
         f"{e}"
     )
     st.stop()
 
-# --- FUNGSI UNTUK MENULIS OTOMATIS KE GOOGLE SHEETS ---
+# --- FUNGSI MENGIRIM STATUS KE GOOGLE APPS SCRIPT ---
 def update_status_to_gsheet(trx_key, status_value):
-    client = get_gspread_client()
-    if not client:
+    if not APPS_SCRIPT_URL:
         return False
     try:
-        sh = client.open(SPREADSHEET_NAME)
-        worksheet = sh.worksheet(active_sheet)
-        
-        header = worksheet.row_values(1)
-        col_trx_idx = None
-        for idx, h in enumerate(header):
-            if any(kw in h.lower() for kw in ["no transaksi", "kode trx", "transaksi"]):
-                col_trx_idx = idx + 1
-                break
-        
-        col_status_idx = None
-        for idx, h in enumerate(header):
-            if "status_verifikasi" in h.lower():
-                col_status_idx = idx + 1
-                break
-        
-        if not col_status_idx:
-            col_status_idx = len(header) + 1
-            worksheet.update_cell(1, col_status_idx, "Status_Verifikasi")
-
-        cell = worksheet.find(str(trx_key))
-        if cell:
-            row_num = cell.row
-            worksheet.update_cell(row_num, col_status_idx, status_value)
-            st.cache_data.clear()
+        payload = {"transaksi": str(trx_key), "status": str(status_value)}
+        response = requests.post(APPS_SCRIPT_URL, json=payload, timeout=10)
+        if response.status_code == 200:
+            st.cache_data.clear()  # Bersihkan cache agar data ter-refresh
             return True
     except Exception as ex:
         st.warning(f"Gagal sinkronisasi otomatis ke Spreadsheet: {ex}")
     return False
 
-# --- PENCARIAN KOLOM SECARA OTOMATIS ---
+# --- PENCARIAN KOLOM OTOMATIS ---
 cols = list(df_original.columns)
 
 def find_col(keywords):
@@ -136,13 +98,13 @@ if "verifikasi_dict" not in st.session_state:
             if s_val and s_val != "nan" and s_val != "Belum Dicek":
                 st.session_state.verifikasi_dict[t_key] = s_val
 
-# --- HEADER UTAMA & REKAP KABUPATEN TEMANGGUNG ---
+# --- HEADER UTAMA ---
 st.markdown(
     """
     <div style="background: linear-gradient(135deg, #002b80 0%, #0055ff 100%); padding: 20px; border-radius: 12px; color: white; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <h1 style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: 0.5px;">KARIYAWAN TIRI</h1>
-            <p style="margin: 0; font-size: 14px; background: rgba(255,255,255,0.2); padding: 6px 14px; border-radius: 20px; font-weight: 500;">Ini adalah aplikasi untuk pengecekan transaksi ipubers</p>
+            <p style="margin: 0; font-size: 14px; background: rgba(255,255,255,0.2); padding: 6px 14px; border-radius: 20px; font-weight: 500;">Pengecekan Transaksi Ipubers</p>
         </div>
         <p style="margin: 5px 0 15px 0; font-size: 13px; opacity: 0.9;">Rekapitulasi Total Keseluruhan Transaksi Kabupaten Temanggung</p>
     </div>
@@ -304,7 +266,7 @@ if selected_nama_kios != "-- Pilih Kios --":
             st.markdown(f"Status: <span style='color:{status_color}; font-weight:bold;'>{current_status}</span>", unsafe_allow_html=True)
 
             st.markdown("---")
-            st.markdown("#### Aksi Verifikasi (Tulis Otomatis ke Spreadsheet):")
+            st.markdown("#### Aksi Verifikasi:")
 
             col_btn1, col_btn2, col_btn3 = st.columns(3)
             with col_btn1:
@@ -343,35 +305,17 @@ if selected_nama_kios != "-- Pilih Kios --":
 
             if pd.notna(nota_url) and str(nota_url).startswith("http"):
                 raw_url = str(nota_url).strip()
-                
-                if "drive.google.com" in raw_url:
-                    file_id = None
-                    if "/file/d/" in raw_url:
-                        try:
-                            file_id = raw_url.split("/file/d/")[1].split("/")[0]
-                        except: pass
-                    elif "open?id=" in raw_url:
-                        try:
-                            file_id = raw_url.split("open?id=")[1].split("&")[0]
-                        except: pass
-                    elif "id=" in raw_url:
-                        try:
-                            file_id = raw_url.split("id=")[1].split("&")[0]
-                        except: pass
-                    
-                    if file_id:
-                        embed_url = f"https://drive.google.com/file/d/{file_id}/preview"
-                        st.markdown(
-                            f'<iframe src="{embed_url}" width="100%" height="520" style="border: none; border-radius: 8px; box-shadow: 0px 2px 5px rgba(0,0,0,0.1);"></iframe>',
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.warning("Format ID Google Drive tidak dapat diekstrak dari link berikut:")
-                        st.code(raw_url)
-                else:
-                    st.image(raw_url, use_container_width=True)
-
-                st.markdown(f"<div style='margin-top: 10px; text-align: center; background: #f0f2f6; padding: 8px; border-radius: 6px;'><a href='{raw_url}' target='_blank' style='font-weight: bold; text-decoration: none;'>🔗 Klik Disini untuk Buka Gambar Ukuran Penuh di Tab Baru</a></div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"""
+                    <div style="background: #f8f9fa; border: 2px dashed #0055ff; padding: 25px; border-radius: 10px; text-align: center; margin-bottom: 15px;">
+                        <p style="margin-bottom: 15px; font-weight: bold; color: #333;">Klik tombol di bawah untuk melihat gambar nota asli secara penuh:</p>
+                        <a href="{raw_url}" target="_blank" style="background: #0055ff; color: white; padding: 10px 20px; border-radius: 6px; font-weight: bold; text-decoration: none; display: inline-block;">
+                            🔗 Buka Nota Gambar / File di Tab Baru
+                        </a>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
             else:
                 st.warning("Link bukti nota tidak tersedia pada baris ini.")
 
