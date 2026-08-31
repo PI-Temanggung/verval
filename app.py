@@ -341,33 +341,39 @@ if selected_nama_kios != "-- Pilih Kios --":
     with col_kanan:
       st.markdown(
           "<h3 style='color: #002b80; font-size: 16px;'>🖼️ Preview Nota"
-          " Bukti (Utuh)</h3>",
+          " Bukti (Terang & Utuh)</h3>",
           unsafe_allow_html=True,
       )
       nota_url = row_data.get(col_url, None) if col_url else None
 
       if pd.notna(nota_url) and str(nota_url).startswith("http"):
         raw_url = str(nota_url).strip()
-        embed_url = raw_url
+        display_img_url = raw_url
 
+        # Ubah link Google Drive biasa menjadi format thumbnail/direct view beresolusi tinggi
         if "drive.google.com" in raw_url:
           if "/file/d/" in raw_url:
             try:
               file_id = raw_url.split("/file/d/")[1].split("/")[0]
-              embed_url = f"https://drive.google.com/file/d/{file_id}/preview"
+              display_img_url = (
+                  f"https://drive.google.com/uc?export=view&id={file_id}"
+              )
             except Exception:
               pass
           elif "open?id=" in raw_url:
             try:
               file_id = raw_url.split("open?id=")[1].split("&")[0]
-              embed_url = f"https://drive.google.com/file/d/{file_id}/preview"
+              display_img_url = (
+                  f"https://drive.google.com/uc?export=view&id={file_id}"
+              )
             except Exception:
               pass
 
+        # Kotak kontainer bersih berwarna putih dengan gambar responsif utuh
         st.markdown(
             f"""
-            <div style="width: 100%; height: 450px; border: 1px solid #ccc; border-radius: 8px; overflow: hidden; background: #000;">
-                <iframe src="{embed_url}" width="100%" height="100%" style="border: none;"></iframe>
+            <div style="width: 100%; background: #ffffff; border: 1px solid #dcdcdc; border-radius: 8px; padding: 10px; text-align: center; box-shadow: 0px 2px 5px rgba(0,0,0,0.05);">
+                <img src="{display_img_url}" style="max-width: 100%; height: auto; max-height: 480px; border-radius: 4px;" alt="Preview Nota"/>
             </div>
             """,
             unsafe_allow_html=True,
