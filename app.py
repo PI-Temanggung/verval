@@ -4,8 +4,6 @@ import pandas as pd
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
-import requests
-from PIL import Image
 
 # Konfigurasi Halaman (Lebar responsif untuk PC dan HP)
 st.set_page_config(
@@ -340,43 +338,41 @@ if selected_nama_kios != "-- Pilih Kios --":
                 st.rerun()
 
         with col_kanan:
-            st.markdown("<h3 style='color: #002b80; font-size: 16px;'>🖼️ Preview Nota Bukti (Lebih Luas)</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 style='color: #002b80; font-size: 16px;'>🖼️ Preview Nota Bukti</h3>", unsafe_allow_html=True)
             nota_url = row_data.get(col_url, None) if col_url else None
 
             if pd.notna(nota_url) and str(nota_url).startswith("http"):
                 raw_url = str(nota_url).strip()
-                display_img_url = raw_url
-
+                
+                # Gunakan metode Iframe Google Drive Preview
                 if "drive.google.com" in raw_url:
                     file_id = None
                     if "/file/d/" in raw_url:
                         try:
                             file_id = raw_url.split("/file/d/")[1].split("/")[0]
-                        except Exception:
-                            pass
+                        except: pass
                     elif "open?id=" in raw_url:
                         try:
                             file_id = raw_url.split("open?id=")[1].split("&")[0]
-                        except Exception:
-                            pass
+                        except: pass
                     elif "id=" in raw_url:
                         try:
                             file_id = raw_url.split("id=")[1].split("&")[0]
-                        except Exception:
-                            pass
+                        except: pass
                     
                     if file_id:
-                        display_img_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+                        embed_url = f"https://drive.google.com/file/d/{file_id}/preview"
+                        st.markdown(
+                            f'<iframe src="{embed_url}" width="100%" height="550" style="border: none; border-radius: 8px; box-shadow: 0px 2px 5px rgba(0,0,0,0.1);"></iframe>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.warning("Format ID Google Drive tidak dapat diekstrak.")
+                else:
+                    # Jika link bukan dari Google Drive (misal imgur, dll), tampilkan biasa
+                    st.image(raw_url, use_container_width=True)
 
-                try:
-                    # Mengunduh dan merender gambar langsung dengan aman lewat requests & PIL
-                    response = requests.get(display_img_url)
-                    img = Image.open(io.BytesIO(response.content))
-                    st.image(img, caption="Preview Nota Bukti", use_container_width=True)
-                except Exception:
-                    st.warning("Gagal memuat preview gambar secara langsung. Silakan buka melalui link di bawah.")
-
-                st.markdown(f"<div style='margin-top: 8px;'><a href='{raw_url}' target='_blank'>🔗 Buka Gambar Asli Ukuran Penuh di Tab Baru</a></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='margin-top: 8px; text-align: center;'><a href='{raw_url}' target='_blank'>🔗 Buka Gambar Asli Ukuran Penuh di Tab Baru</a></div>", unsafe_allow_html=True)
             else:
                 st.warning("Link bukti nota tidak tersedia pada baris ini.")
 
