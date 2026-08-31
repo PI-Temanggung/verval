@@ -425,17 +425,18 @@ if selected_nama_kios != "-- Pilih Kios --":
 
             if pd.notna(raw_url) and str(raw_url).strip().startswith("http"):
                 raw_url = str(raw_url).strip()
-                with st.spinner("Memuat gambar nota..."):
-                    img_bytes, err, debug_info = fetch_nota_image(raw_url)
-                if img_bytes:
-                    st.image(img_bytes, use_container_width=True)
-                else:
-                    st.warning(err)
-                    with st.expander("🔧 Detail teknis (untuk diagnosa)"):
-                        st.code(debug_info or "-")
+                safe_key = "".join(ch for ch in current_trx_key if ch.isalnum())
+                st.markdown(
+                    f"""
+                    <iframe src="{raw_url}" referrerpolicy="no-referrer"
+                            style="width:100%; height:520px; border:1px solid #e5e7eb;
+                            border-radius:10px;" loading="lazy"></iframe>
+                    """,
+                    unsafe_allow_html=True,
+                )
                 st.markdown(
                     f"<div style='text-align:center; margin-top:8px;'>"
-                    f"<a href='{raw_url}' target='_blank'>🔗 Buka Nota di Tab Baru</a></div>",
+                    f"<a href='{raw_url}' target='_blank'>🔗 Kalau tidak muncul di atas, buka Nota di Tab Baru</a></div>",
                     unsafe_allow_html=True,
                 )
             else:
