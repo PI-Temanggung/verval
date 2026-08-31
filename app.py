@@ -2,17 +2,34 @@ import io
 import openpyxl
 import pandas as pd
 import streamlit as st
+import gspread
+from google.oauth2.service_account import Credentials
 
 # Konfigurasi Halaman (Lebar responsif untuk PC dan HP)
 st.set_page_config(
     page_title="Panel Verifikasi Kariyawan Tiri", page_icon="📱", layout="wide"
 )
 
-# Link export otomatis dari Spreadsheet Anda
-SHEET_URL = (
-    "https://docs.google.com/spreadsheets/d/1ikC39Z3V9w5yypVDGVgMsfiuSInRRgvR/export?format=xlsx"
-)
+# Link export cepat untuk membaca data agar preview nota tetap lancar & cepat
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1ikC39Z3V9w5yypVDGVgMsfiuSInRRgvR/export?format=xlsx"
 
+# Nama file Google Spreadsheet Anda di Google Drive (untuk proses tulis otomatis)
+SPREADSHEET_NAME = "Nama_File_Spreadsheet_Anda" # Sesuaikan dengan nama file spreadsheet Anda
+
+# --- KONEKSI KE GOOGLE SHEETS UNTUK TULIS DATA (BACKGROUND) ---
+@st.cache_resource
+def get_gspread_client():
+    try:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        client = gspread.authorize(creds)
+        return client
+    except Exception as e:
+        return None
 
 # Memuat data live dari Google Spreadsheet (Cache 30 detik agar update cepat)
 @st.cache_data(ttl=30)
@@ -22,20 +39,57 @@ def load_excel_data():
     df = pd.read_excel(SHEET_URL, sheet_name=sheet_name, header=0, dtype=str)
     return df, sheet_name
 
-
 try:
     df_original, active_sheet = load_excel_data()
 except Exception as e:
     st.error(
-        "Gagal membaca data dari Google Spreadsheet. Pastikan akses sharing diset"
-        " ke 'Anyone with the link can view'.\n\nError: "
+        "Gagal membaca data dari Google Spreadsheet. Pastikan akses sharing diset ke 'Anyone with the link can view' atau bagikan ke email service account.\n\nError: "
         f"{e}"
     )
     st.stop()
 
+# --- FUNGSI UNTUK MENULIS OTOMATIS KE GOOGLE SHEETS ---
+def update_status_to_gsheet(trx_key, status_value):
+    client = get_gspread_client()
+    if not client:
+        return False
+    try:
+        sh = client.open(SPREADSHEET_NAME)
+        worksheet = sh.worksheet(active_sheet)
+        
+        # Cari nama kolom transaksi di header gspread
+        header = worksheet.row_values(1)
+        col_trx_idx = None
+        for idx, h in enumerate(header):
+            if any(kw in h.lower() for kw in ["no transaksi", "kode trx", "transaksi"]):
+                col_trx_idx = idx + 1 # gspread index mulai dari 1
+                break
+        
+        col_status_idx = None
+        for idx, h in enumerate(header):
+            if "status_verifikasi" in h.lower():
+                col_status_idx = idx + 1
+                break
+        
+        # Jika kolom Status_Verifikasi belum ada di sheet, buat di kolom terakhir
+        if not col_status_idx:
+            col_status_idx = len(header) + 1
+            worksheet.update_cell(1, col_status_idx, "Status_Verifikasi")
+
+        # Cari baris yang cocok dengan No Transaksi
+        cell = worksheet.find(str(trx_key))
+        if cell:
+            row_num = cell.row
+            worksheet.update_cell(row_num, col_status_idx, status_value)
+            # Bersihkan cache agar data terbaru langsung terbaca
+            st.cache_data.clear()
+            return True
+    except Exception as ex:
+        st.warning(f"Gagal sinkronisasi otomatis ke Spreadsheet: {ex}")
+    return False
+
 # --- PENCARIAN KOLOM SECARA OTOMATIS ---
 cols = list(df_original.columns)
-
 
 def find_col(keywords):
     for c in cols:
@@ -43,7 +97,6 @@ def find_col(keywords):
             if kw.lower() in str(c).lower():
                 return c
     return None
-
 
 col_kec = find_col(["kecamatan"])
 col_trx = find_col(["no transaksi", "kode trx", "transaksi"])
@@ -67,8 +120,8 @@ else:
 
 if not col_kec or not col_trx:
     st.error(
-        "Kolom penting ('Kecamatan' atau 'No Transaksi') tidak ditemukan. Kolom"
-        f" terdeteksi: {cols}"
+        "Kolom penting ('Kecamatan' atau 'No Transaksi') tidak ditemukan. Kolom terdeteksi: "
+        f"{cols}"
     )
     st.stop()
 
@@ -79,9 +132,18 @@ df_original["Kios_Gabungan"] = (
     + df_original[col_nama_kios_pos].astype(str)
 )
 
-# Inisialisasi Session State Verifikasi Lokal
+# Cek apakah ada kolom Status_Verifikasi di dataframe asli dari spreadsheet
+col_status_existing = find_col(["status_verifikasi", "status verifikasi"])
+
+# Inisialisasi Session State Berdasarkan Data Spreadsheet (jika sudah ada isinya)
 if "verifikasi_dict" not in st.session_state:
     st.session_state.verifikasi_dict = {}
+    if col_status_existing:
+        for _, r in df_original.iterrows():
+            t_key = str(r[col_trx])
+            s_val = str(r[col_status_existing])
+            if s_val and s_val != "nan" and s_val != "Belum Dicek":
+                st.session_state.verifikasi_dict[t_key] = s_val
 
 # --- HEADER UTAMA & REKAP KABUPATEN TEMANGGUNG DI ATAS ---
 st.markdown(
@@ -218,8 +280,7 @@ if selected_nama_kios != "-- Pilih Kios --":
 
     if len(filtered_indices) == 0:
         st.warning(
-            f"Tidak ada data nota dengan status '{selected_status_filter}' untuk"
-            " filter ini."
+            f"Tidak ada data nota dengan status '{selected_status_filter}' untuk filter ini."
         )
     else:
         if "current_pos" not in st.session_state:
@@ -256,8 +317,7 @@ if selected_nama_kios != "-- Pilih Kios --":
         ragu_kios = sum(
             1
             for _, r in df_kios_all.iterrows()
-            if st.session_state.verifikasi_dict.get(str(r[col_trx]))
-            == "RAGU-RAGU"
+            if st.session_state.verifikasi_dict.get(str(r[col_trx])) == "RAGU-RAGU"
         )
         ditolak_kios = sum(
             1
@@ -279,8 +339,7 @@ if selected_nama_kios != "-- Pilih Kios --":
 
         # Metrik Ringkasan Kios
         st.markdown(
-            "<h4 style='color: #002b80; font-size: 15px;'>📌 Ringkasan Kios"
-            " Terpilih</h4>",
+            "<h4 style='color: #002b80; font-size: 15px;'>📌 Ringkasan Kios Terpilih</h4>",
             unsafe_allow_html=True,
         )
         m1, m2, m3, m4, m5 = st.columns(5)
@@ -297,8 +356,7 @@ if selected_nama_kios != "-- Pilih Kios --":
 
         with col_kiri:
             st.markdown(
-                "<h3 style='color: #002b80; font-size: 16px;'>📄 Detail"
-                " Transaksi</h3>",
+                "<h3 style='color: #002b80; font-size: 16px;'>📄 Detail Transaksi</h3>",
                 unsafe_allow_html=True,
             )
             trx_val = row_data.get(col_trx, "-")
@@ -324,8 +382,7 @@ if selected_nama_kios != "-- Pilih Kios --":
             st.markdown(f"**NIK:** `{nik_val}`")
             st.markdown(f"**Tanggal:** {tgl_val}")
             st.markdown(
-                f"**Tipe Tebus:** <span style='color:blue;"
-                f" font-weight:bold;'>{tipe_val}</span>",
+                f"**Tipe Tebus:** <span style='color:blue; font-weight:bold;'>{tipe_val}</span>",
                 unsafe_allow_html=True,
             )
 
@@ -354,8 +411,7 @@ if selected_nama_kios != "-- Pilih Kios --":
                 status_color = "gray"
 
             st.markdown(
-                f"Status: <span"
-                f" style='color:{status_color}; font-weight:bold;'>{current_status}</span>",
+                f"Status: <span style='color:{status_color}; font-weight:bold;'>{current_status}</span>",
                 unsafe_allow_html=True,
             )
 
@@ -366,15 +422,15 @@ if selected_nama_kios != "-- Pilih Kios --":
             with col_btn1:
                 if st.button("✅ TERIMA", type="primary", key=f"terima_{row_idx}"):
                     st.session_state.verifikasi_dict[current_trx_key] = "TERIMA"
+                    update_status_to_gsheet(current_trx_key, "TERIMA")
                     if st.session_state.current_pos < len(filtered_indices) - 1:
                         st.session_state.current_pos += 1
                     st.rerun()
 
             with col_btn2:
                 if st.button("⚠️ RAGU", key=f"ragu_{row_idx}"):
-                    st.session_state.verifikasi_dict[current_trx_key] = (
-                        "RAGU-RAGU"
-                    )
+                    st.session_state.verifikasi_dict[current_trx_key] = "RAGU-RAGU"
+                    update_status_to_gsheet(current_trx_key, "RAGU-RAGU")
                     if st.session_state.current_pos < len(filtered_indices) - 1:
                         st.session_state.current_pos += 1
                     st.rerun()
@@ -382,6 +438,7 @@ if selected_nama_kios != "-- Pilih Kios --":
             with col_btn3:
                 if st.button("❌ TOLAK", key=f"tolak_{row_idx}"):
                     st.session_state.verifikasi_dict[current_trx_key] = "TOLAK"
+                    update_status_to_gsheet(current_trx_key, "TOLAK")
                     if st.session_state.current_pos < len(filtered_indices) - 1:
                         st.session_state.current_pos += 1
                     st.rerun()
@@ -389,12 +446,12 @@ if selected_nama_kios != "-- Pilih Kios --":
             if st.button("🔄 Reset Status", key=f"reset_{row_idx}"):
                 if current_trx_key in st.session_state.verifikasi_dict:
                     del st.session_state.verifikasi_dict[current_trx_key]
+                    update_status_to_gsheet(current_trx_key, "Belum Dicek")
                 st.rerun()
 
         with col_kanan:
             st.markdown(
-                "<h3 style='color: #002b80; font-size: 16px;'>🖼️ Preview Nota"
-                " Bukti (Lebih Luas)</h3>",
+                "<h3 style='color: #002b80; font-size: 16px;'>🖼️ Preview Nota Bukti (Lebih Luas)</h3>",
                 unsafe_allow_html=True,
             )
             nota_url = row_data.get(col_url, None) if col_url else None
@@ -403,35 +460,37 @@ if selected_nama_kios != "-- Pilih Kios --":
                 raw_url = str(nota_url).strip()
                 display_img_url = raw_url
 
+                # Konversi link Google Drive agar langsung dirender dengan stabil
                 if "drive.google.com" in raw_url:
+                    file_id = None
                     if "/file/d/" in raw_url:
                         try:
-                            file_id = (
-                                raw_url.split("/file/d/")[1].split("/")[0]
-                            )
-                            display_img_url = f"https://drive.google.com/uc?export=view&id={file_id}"
+                            file_id = raw_url.split("/file/d/")[1].split("/")[0]
                         except Exception:
                             pass
                     elif "open?id=" in raw_url:
                         try:
                             file_id = raw_url.split("open?id=")[1].split("&")[0]
-                            display_img_url = f"https://drive.google.com/uc?export=view&id={file_id}"
                         except Exception:
                             pass
+                    elif "id=" in raw_url:
+                        try:
+                            file_id = raw_url.split("id=")[1].split("&")[0]
+                        except Exception:
+                            pass
+                    
+                    if file_id:
+                        # Gunakan endpoint thumbnail resolusi besar dari Google Drive
+                        display_img_url = f"https://drive.google.com/thumbnail?id={file_id}&sz=w1000"
+
+                # Gunakan fungsi st.image bawaan Streamlit agar gambar tampil sempurna
+                try:
+                    st.image(display_img_url, caption="Preview Nota Bukti", use_container_width=True)
+                except Exception:
+                    st.warning("Gagal memuat preview gambar secara langsung.")
 
                 st.markdown(
-                    f"""
-                    <div style="width: 100%; background: #ffffff; border: 1px solid #dcdcdc; border-radius: 8px; padding: 10px; text-align: center; box-shadow: 0px 2px 5px rgba(0,0,0,0.05);">
-                        <img src="{display_img_url}" style="max-width: 100%; height: auto; max-height: 480px; border-radius: 4px;" alt="Preview Nota"/>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-                st.markdown(
-                    f"<div style='margin-top: 8px;'><a href='{raw_url}'"
-                    " target='_blank'>🔗 Buka Gambar Asli Ukuran Penuh di Tab"
-                    " Baru</a></div>",
+                    f"<div style='margin-top: 8px;'><a href='{raw_url}' target='_blank'>🔗 Buka Gambar Asli Ukuran Penuh di Tab Baru</a></div>",
                     unsafe_allow_html=True,
                 )
             else:
@@ -447,8 +506,7 @@ if selected_nama_kios != "-- Pilih Kios --":
                     st.rerun()
         with nav_c2:
             st.markdown(
-                f"<p style='text-align: center; font-weight: bold; margin: 5px"
-                f" 0;'>Nota ke-{pos + 1} dari {len(filtered_indices)}</p>",
+                f"<p style='text-align: center; font-weight: bold; margin: 5px 0;'>Nota ke-{pos + 1} dari {len(filtered_indices)}</p>",
                 unsafe_allow_html=True,
             )
         with nav_c3:
@@ -460,8 +518,7 @@ if selected_nama_kios != "-- Pilih Kios --":
 # --- PANEL DOWNLOAD HASIL REKAP ---
 st.markdown("---")
 st.markdown(
-    "<h3 style='color: #002b80; font-size: 16px;'>📥 Download Hasil"
-    " Verifikasi Excel</h3>",
+    "<h3 style='color: #002b80; font-size: 16px;'>📥 Download Hasil Verifikasi Excel</h3>",
     unsafe_allow_html=True,
 )
 
